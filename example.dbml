@@ -58,8 +58,11 @@ Table post_tags {
 }
 
 // Relationships
-Ref: posts.user_id > users.id [delete: cascade]
-Ref: comments.post_id > posts.id [delete: cascade]
-Ref: comments.user_id > users.id [delete: set null]
-Ref: post_tags.post_id > posts.id [delete: cascade]
-Ref: post_tags.tag_id > tags.id [delete: cascade]
+// The labels will show cardinality like 1:n, 1:1, n:n
+// Examples: 1:1 (one to one), 1:n (one to many), n:n (many to many)
+
+Ref: posts.user_id > users.id [delete: cascade]  // 1:n
+Ref: comments.post_id > posts.id [delete: cascade]  // 1:n
+Ref: comments.user_id > users.id [delete: set null]  // 1:n
+Ref: post_tags.post_id <> posts.id [delete: cascade]  // n:n
+Ref: post_tags.tag_id <> tags.id [delete: cascade]  // n:n

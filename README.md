@@ -5,9 +5,24 @@ Una extensión de VS Code para previsualizar diagramas de bases de datos relacio
 ## Características
 
 - 📝 **Sintaxis DBML**: Soporte completo para archivos `.dbml`
-- 👁️ **Vista previa en tiempo real**: Botón de ojo en la barra del editor para abrir la vista previa
+- 👁️ **Vista previa**: Botón de ojo en la barra del editor para abrir la vista previa
 - 🎨 **Adaptación de tema**: Los colores del diagrama se adaptan automáticamente al tema de VS Code
-- 🔄 **Actualización automática**: La vista previa se actualiza cuando guardas cambios en el archivo DBML
+- 💾 **Actualización al guardar**: La vista previa se actualiza solo cuando guardas el archivo (Ctrl+S)
+- 🖱️ **Tablas movibles**: Arrastra y suelta las tablas para reorganizar el diagrama libremente
+- 🔗 **Etiquetas de cardinalidad**: Las relaciones muestran su tipo directamente:
+  - `1:1` = Uno a uno (one-to-one)
+  - `1:n` = Uno a muchos (one-to-many)
+  - `n:n` = Muchos a muchos (many-to-many)
+  - `0:1` = Cero o uno (optional relationship)
+- 🎨 **Líneas interactivas**: Estados de color dinámicos
+  - **Pasivo**: Color suave cuando no hay interacción
+  - **Activo**: Color vivo cuando pasas el mouse sobre una tabla relacionada
+- ∞ **Lienzo infinito**: Canvas sin límites con pan y zoom
+  - Arrastra el fondo para desplazarte por el canvas
+  - Usa la rueda del mouse para hacer zoom
+  - Las tablas se ajustan a una cuadrícula invisible
+  - **Posiciones persistentes**: Las ubicaciones se guardan automáticamente
+- 📐 **Líneas inteligentes**: Las relaciones siguen rutas ortogonales (solo ángulos de 0° y 90°) con esquinas redondeadas
 
 ## Uso
 
@@ -15,6 +30,14 @@ Una extensión de VS Code para previsualizar diagramas de bases de datos relacio
 2. Escribe tu esquema de base de datos en sintaxis DBML
 3. Haz clic en el icono de ojo (👁️) en la esquina superior derecha del editor
 4. La vista previa del diagrama aparecerá en un panel lateral
+
+### Controles del diagrama
+
+- **Mover tablas**: Haz clic y arrastra una tabla a una nueva posición
+- **Pan (desplazar)**: Haz clic y arrastra el fondo del canvas
+- **Zoom**: Usa la rueda del mouse para acercar/alejar
+- **Ver relaciones**: Pasa el mouse sobre una tabla para resaltar sus conexiones
+- **Auto-guardado**: Las posiciones y el zoom se guardan automáticamente y persisten entre sesiones
 
 ## Ejemplo de sintaxis DBML
 
@@ -54,9 +77,16 @@ Para ejecutar esta extensión en modo desarrollo:
 ### 0.0.1
 
 Versión inicial:
-- Soporte básico para archivos DBML
-- Vista previa de diagramas con adaptación de tema
-- Actualización automática al editar
+- Soporte básico para archivos DBML con syntax highlighting
+- Vista previa de diagramas con adaptación automática al tema de VS Code
+- Actualización al guardar (sin errores mientras escribes)
+- Tablas arrastrables con posiciones persistentes entre sesiones
+- Etiquetas de cardinalidad (1:1, 1:n, n:n) en lugar de flechas
+- Líneas con estados: pasivo (suave) y activo (resaltado al hover)
+- Canvas infinito con pan y zoom
+- Líneas ortogonales inteligentes con esquinas redondeadas
+- Alineación automática a cuadrícula invisible
+- Relaciones dinámicas que se actualizan en tiempo real
 
 ---
 

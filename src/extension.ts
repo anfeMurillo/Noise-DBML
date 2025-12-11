@@ -25,11 +25,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(disposable);
 
-	// Watch for document changes to update preview
+	// Watch for document save to update preview
 	context.subscriptions.push(
-		vscode.workspace.onDidChangeTextDocument(e => {
-			if (e.document.languageId === 'dbml') {
-				provider.updatePreview(e.document);
+		vscode.workspace.onDidSaveTextDocument(document => {
+			if (document.languageId === 'dbml') {
+				provider.updatePreview(document);
 			}
 		})
 	);
