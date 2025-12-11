@@ -1,6 +1,13 @@
 import * as vscode from 'vscode';
 import { Parser } from '@dbml/core';
+import * as path from 'path';
+import { promises as fs } from 'fs';
 import { generateSvgFromSchema, ParsedSchema, ParsedTable, ParsedField, ParsedRef } from './svgGenerator';
+
+interface LayoutData {
+    positions?: Record<string, { x: number; y: number }>;
+    viewBox?: { x: number; y: number; width: number; height: number };
+}
 
 export class DbmlPreviewProvider {
 	private panel: vscode.WebviewPanel | undefined;
@@ -26,6 +33,33 @@ export class DbmlPreviewProvider {
 				}
 			);
 
+            this.panel.webview.onDidReceiveMessage(async message => {
+                if (!message || typeof message !== 'object') {
+                    return;
+                }
+
+                if (message.type === 'saveLayout') {
+                    const payload = message.payload;
+                    if (!payload || typeof payload !== 'object') {
+                        return;
+                    }
+
+                    const documentPath = typeof payload.documentPath === 'string' ? payload.documentPath : '';
+                    if (!documentPath || !this.currentDocument || this.currentDocument.uri.fsPath !== documentPath) {
+                        return;
+                    }
+
+                    try {
+                        await this.saveLayout(documentPath, {
+                            positions: this.sanitizePositions(payload.positions),
+                            viewBox: this.sanitizeViewBox(payload.viewBox)
+                        });
+                    } catch (error) {
+                        console.error('Failed to save DBML layout data:', error);
+                    }
+                }
+            });
+
 			// Handle when the panel is closed
 			this.panel.onDidDispose(() => {
 				this.panel = undefined;
@@ -33,17 +67,117 @@ export class DbmlPreviewProvider {
 		}
 
 		// Update the webview content
-		this.updatePreview(document);
+        void this.updatePreview(document);
 	}
 
-	public updatePreview(document: vscode.TextDocument) {
+    public async updatePreview(document: vscode.TextDocument) {
 		if (!this.panel || document !== this.currentDocument) {
 			return;
 		}
 
 		const dbmlContent = document.getText();
-		this.panel.webview.html = this.getWebviewContent(dbmlContent);
+        const isFileDocument = document.uri.scheme === 'file';
+        const documentPath = isFileDocument ? document.uri.fsPath : '';
+        let layoutData: LayoutData = {};
+
+        if (isFileDocument) {
+            try {
+                layoutData = await this.loadLayout(documentPath);
+            } catch (error) {
+                console.error('Failed to load DBML layout data:', error);
+            }
+        }
+
+        this.panel.webview.html = this.getWebviewContent(dbmlContent, layoutData, documentPath);
 	}
+
+    private getLayoutFilePathFromFsPath(documentPath: string): string {
+        const directory = path.dirname(documentPath);
+        const extension = path.extname(documentPath);
+        const baseName = path.basename(documentPath, extension);
+        const layoutFileName = `${baseName}${extension}.layout.json`;
+        return path.join(directory, layoutFileName);
+    }
+
+    private async loadLayout(documentPath: string): Promise<LayoutData> {
+        const layoutFilePath = this.getLayoutFilePathFromFsPath(documentPath);
+        try {
+            const raw = await fs.readFile(layoutFilePath, 'utf8');
+            const parsed = JSON.parse(raw) as Record<string, unknown>;
+            const layout: LayoutData = {};
+            const positions = this.sanitizePositions(parsed['positions']);
+            if (positions && Object.keys(positions).length > 0) {
+                layout.positions = positions;
+            }
+            const viewBox = this.sanitizeViewBox(parsed['viewBox']);
+            if (viewBox) {
+                layout.viewBox = viewBox;
+            }
+            return layout;
+        } catch (error) {
+            const nodeError = error as NodeJS.ErrnoException;
+            if (nodeError && nodeError.code === 'ENOENT') {
+                return {};
+            }
+            throw error;
+        }
+    }
+
+    private sanitizePositions(input: unknown): Record<string, { x: number; y: number }> {
+        if (!input || typeof input !== 'object') {
+            return {};
+        }
+
+        const result: Record<string, { x: number; y: number }> = {};
+        for (const [tableName, value] of Object.entries(input as Record<string, unknown>)) {
+            if (!value || typeof value !== 'object') {
+                continue;
+            }
+            const candidate = value as Record<string, unknown>;
+            const x = Number(candidate.x);
+            const y = Number(candidate.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                continue;
+            }
+            result[tableName] = { x, y };
+        }
+
+        return result;
+    }
+
+    private sanitizeViewBox(input: unknown): LayoutData['viewBox'] {
+        if (!input || typeof input !== 'object') {
+            return undefined;
+        }
+
+        const candidate = input as Record<string, unknown>;
+        const x = Number(candidate.x);
+        const y = Number(candidate.y);
+        const width = Number(candidate.width);
+        const height = Number(candidate.height);
+
+        if (![x, y, width, height].every(value => Number.isFinite(value))) {
+            return undefined;
+        }
+
+        return { x, y, width, height };
+    }
+
+    private async saveLayout(documentPath: string, layout: LayoutData): Promise<void> {
+        const layoutFilePath = this.getLayoutFilePathFromFsPath(documentPath);
+        const directory = path.dirname(layoutFilePath);
+        await fs.mkdir(directory, { recursive: true });
+
+        const payload: LayoutData = {};
+        if (layout.positions) {
+            payload.positions = layout.positions;
+        }
+        if (layout.viewBox) {
+            payload.viewBox = layout.viewBox;
+        }
+
+        await fs.writeFile(layoutFilePath, JSON.stringify(payload, null, 2), 'utf8');
+    }
 
 	private convertToSchema(database: any): ParsedSchema {
 		const tables: ParsedTable[] = [];
@@ -102,7 +236,7 @@ export class DbmlPreviewProvider {
 		return { tables, refs };
 	}
 
-	private getWebviewContent(dbmlContent: string): string {
+    private getWebviewContent(dbmlContent: string, layoutData: LayoutData, documentPath: string): string {
 		let svgContent = '';
 		let errorMessage = '';
 
@@ -120,6 +254,9 @@ export class DbmlPreviewProvider {
 			errorMessage = error instanceof Error ? error.message : 'Unknown error parsing DBML';
 			console.error('DBML Parse Error:', error);
 		}
+
+        const layoutJson = JSON.stringify(layoutData ?? {}).replace(/</g, '\\u003c');
+        const documentPathJson = JSON.stringify(documentPath ?? '').replace(/</g, '\\u003c');
 
 		return `<!DOCTYPE html>
 <html lang="en">
@@ -669,6 +806,8 @@ export class DbmlPreviewProvider {
             const vscode = acquireVsCodeApi();
             const svg = document.getElementById('diagram-svg');
             const container = document.querySelector('.diagram-container');
+            const initialLayoutData = ${layoutJson};
+            const documentPath = ${documentPathJson};
             const tableLookup = new Map();
             document.querySelectorAll('.draggable').forEach(table => {
                 const name = table.getAttribute('data-table');
@@ -684,14 +823,59 @@ export class DbmlPreviewProvider {
             let isPanning = false;
             let panStart = { x: 0, y: 0 };
             
-            // ViewBox state for pan and zoom
             let viewBox = { x: 0, y: 0, width: 2000, height: 2000 };
             const gridSize = 20;
-            
-            // Load saved state
+            const layoutCanPersist = typeof documentPath === 'string' && documentPath.length > 0;
+			
             const state = vscode.getState() || {};
-            let positions = state.positions || {};
-            const savedViewBox = state.viewBox;
+            let positions = {};
+            if (state.positions && typeof state.positions === 'object') {
+                positions = JSON.parse(JSON.stringify(state.positions));
+            } else if (initialLayoutData.positions && typeof initialLayoutData.positions === 'object') {
+                positions = JSON.parse(JSON.stringify(initialLayoutData.positions));
+            }
+            const savedViewBox = state.viewBox || initialLayoutData.viewBox;
+            let layoutSaveTimeout = null;
+			
+            function sendLayoutUpdate() {
+                if (!layoutCanPersist) {
+                    return;
+                }
+
+                const clonedPositions = positions && typeof positions === 'object'
+                    ? JSON.parse(JSON.stringify(positions))
+                    : {};
+                const clonedViewBox = {
+                    x: viewBox.x,
+                    y: viewBox.y,
+                    width: viewBox.width,
+                    height: viewBox.height
+                };
+
+                vscode.postMessage({
+                    type: 'saveLayout',
+                    payload: {
+                        documentPath,
+                        positions: clonedPositions,
+                        viewBox: clonedViewBox
+                    }
+                });
+            }
+
+            function scheduleLayoutSave() {
+                if (!layoutCanPersist) {
+                    return;
+                }
+
+                if (layoutSaveTimeout) {
+                    clearTimeout(layoutSaveTimeout);
+                }
+
+                layoutSaveTimeout = setTimeout(() => {
+                    layoutSaveTimeout = null;
+                    sendLayoutUpdate();
+                }, 250);
+            }
             
             // Collision detection helper
             function getTableHeight(table) {
@@ -986,10 +1170,16 @@ export class DbmlPreviewProvider {
                 // Save state
                 state.positions = positions;
                 vscode.setState(state);
+                scheduleLayoutSave();
             }
             
             if (savedViewBox) {
-                viewBox = savedViewBox;
+                viewBox = {
+                    x: savedViewBox.x,
+                    y: savedViewBox.y,
+                    width: savedViewBox.width,
+                    height: savedViewBox.height
+                };
                 svg.setAttribute('viewBox', viewBox.x + ' ' + viewBox.y + ' ' + viewBox.width + ' ' + viewBox.height);
             }
             
@@ -1061,6 +1251,7 @@ export class DbmlPreviewProvider {
                 // Save viewBox state
                 state.viewBox = viewBox;
                 vscode.setState(state);
+                scheduleLayoutSave();
             });
             
             // Mouse down - start dragging or panning
@@ -1165,6 +1356,7 @@ export class DbmlPreviewProvider {
                     }
                     state.viewBox = viewBox;
                     vscode.setState(state);
+                    scheduleLayoutSave();
                     
                     isDragging = false;
                     selectedTable = null;
@@ -1174,6 +1366,7 @@ export class DbmlPreviewProvider {
                     container.classList.remove('panning');
                     state.viewBox = viewBox;
                     vscode.setState(state);
+                    scheduleLayoutSave();
                     isPanning = false;
                 }
             });
@@ -1500,6 +1693,7 @@ export class DbmlPreviewProvider {
                     svg.setAttribute('viewBox', '0 0 2000 2000');
                     state.viewBox = viewBox;
                     vscode.setState(state);
+                    scheduleLayoutSave();
                 });
             }
             
