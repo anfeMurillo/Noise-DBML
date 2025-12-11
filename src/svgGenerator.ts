@@ -24,9 +24,34 @@ export interface ParsedRef {
 	onUpdate?: string;
 }
 
+export interface ParsedGroup {
+	name: string;
+	tables: string[];
+	color?: string;
+	note?: string;
+}
+
 export interface ParsedSchema {
 	tables: ParsedTable[];
 	refs: ParsedRef[];
+	groups?: ParsedGroup[];
+}
+
+function escapeXml(value: unknown): string {
+	let normalized: string;
+	if (typeof value === 'string') {
+		normalized = value;
+	} else if (typeof value === 'number') {
+		normalized = value.toString();
+	} else {
+		normalized = '';
+	}
+	return normalized
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 }
 
 // Calculate the best connection sides based on table positions
@@ -159,9 +184,18 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	const tableSpacing = 100;
 	const tablesPerRow = 3;
 	const gridSize = 20; // Grid cell size for routing
+	const groups = schema.groups ?? [];
+	const groupByTable = new Map<string, ParsedGroup>();
+	groups.forEach(group => {
+		group.tables.forEach(tableName => {
+			if (tableName) {
+				groupByTable.set(tableName, group);
+			}
+		});
+	});
 	
 	// Calculate positions for tables
-	const tablePositions: Array<{table: ParsedTable, x: number, y: number}> = [];
+	const tablePositions: Array<{table: ParsedTable, x: number, y: number, height: number}> = [];
 	schema.tables.forEach((table, index) => {
 		let x: number, y: number;
 		
@@ -193,7 +227,8 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			y = Math.round(rowY / gridSize) * gridSize;
 		}
 		
-		tablePositions.push({ table, x, y });
+		const tableHeight = headerHeight + (table.fields.length * fieldHeight);
+		tablePositions.push({ table, x, y, height: tableHeight });
 	});
 
 	// Infinite canvas with viewBox
@@ -215,6 +250,32 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	svg += `<line x1="10" y1="1" x2="10" y2="9" class="cardinality-marker" stroke-width="2" />`;
 	svg += `</marker>`;
 	svg += `</defs>`;
+
+	if (groups.length > 0) {
+		svg += '<g id="table-groups">';
+		groups.forEach(group => {
+			const safeName = escapeXml(group.name || '');
+			const safeColor = escapeXml(group.color ?? '');
+			const safeNote = escapeXml(group.note ?? '');
+			const tablesAttr = escapeXml(JSON.stringify(group.tables ?? []));
+			svg += `<g class="table-group" data-group="${safeName}" data-color="${safeColor}" data-note="${safeNote}" data-tables="${tablesAttr}" data-collapsed="false">`;
+			svg += `<rect class="table-group-shadow" x="0" y="0" width="0" height="0" rx="22" ry="22"></rect>`;
+			svg += `<rect class="table-group-body" x="0" y="0" width="0" height="0" rx="18" ry="18"></rect>`;
+			svg += `<g class="table-group-header" data-group-name="${safeName}">`;
+			svg += `<rect class="table-group-header-bg" x="0" y="0" width="0" height="0" rx="14" ry="14"></rect>`;
+			svg += `<text class="table-group-title" x="0" y="0">${safeName}</text>`;
+			svg += `<g class="table-group-toggle" role="button" tabindex="0" aria-label="Toggle group ${safeName}">`;
+			svg += `<rect class="table-group-toggle-bg" x="0" y="0" width="22" height="22" rx="5" ry="5"></rect>`;
+			svg += `<path class="table-group-toggle-icon" d="M 6 11 L 16 11 M 11 6 L 11 16"></path>`;
+			svg += `</g>`;
+			svg += `</g>`;
+			if (safeNote) {
+				svg += `<title>${safeNote}</title>`;
+			}
+			svg += `</g>`;
+		});
+		svg += '</g>';
+	}
 	
 	svg += '<g id="relationships">';
 
@@ -385,21 +446,27 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	});
 
 	// Draw tables
-	tablePositions.forEach(({ table, x, y }) => {
-		const tableHeight = headerHeight + (table.fields.length * fieldHeight);
+	tablePositions.forEach(({ table, x, y, height }) => {
+		const tableHeight = height;
+		const safeTableName = escapeXml(table.name);
+		const groupInfo = groupByTable.get(table.name);
+		const groupAttr = groupInfo ? ` data-group="${escapeXml(groupInfo.name)}"` : '';
+		const groupColorAttr = groupInfo?.color ? ` data-group-color="${escapeXml(groupInfo.color)}"` : '';
+		const groupNoteAttr = groupInfo?.note ? ` data-group-note="${escapeXml(groupInfo.note)}"` : '';
+		const clipSafeId = table.name.replace(/[^a-zA-Z0-9_-]/g, '_');
 		
 		// Table container with data attributes for dragging
-		svg += `<g class="table draggable" data-table="${table.name}" data-x="${x}" data-y="${y}" transform="translate(${x}, ${y})" style="cursor: move;">`;
+		svg += `<g class="table draggable" data-table="${safeTableName}" data-x="${x}" data-y="${y}" data-height="${tableHeight}" data-width="${tableWidth}"${groupAttr}${groupColorAttr}${groupNoteAttr} transform="translate(${x}, ${y})" style="cursor: move;">`;
 		
 		// Clip path for rounded corners only on outer edges
 		svg += `<defs>`;
-		svg += `<clipPath id="clip-${table.name}">`;
+		svg += `<clipPath id="clip-${clipSafeId}">`;
 		svg += `<rect width="${tableWidth}" height="${tableHeight}" rx="8" ry="8" />`;
 		svg += `</clipPath>`;
 		svg += `</defs>`;
 		
 		// Background group with clip path
-		svg += `<g clip-path="url(#clip-${table.name})">`;
+		svg += `<g clip-path="url(#clip-${clipSafeId})">`;
 		
 		// Header (no rounded corners)
 		svg += `<rect width="${tableWidth}" height="${headerHeight}" class="table-header" />`;
@@ -413,7 +480,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		svg += `<rect width="${tableWidth}" height="${tableHeight}" class="table-border" rx="8" ry="8" fill="none" />`;
 		
 		// Header text
-		svg += `<text x="${tableWidth / 2}" y="${headerHeight / 2 + 5}" class="table-name" text-anchor="middle" font-weight="bold" font-size="16">${table.name}</text>`;
+		svg += `<text x="${tableWidth / 2}" y="${headerHeight / 2 + 5}" class="table-name" text-anchor="middle" font-weight="bold" font-size="16">${safeTableName}</text>`;
 		
 		// Fields
 		table.fields.forEach((field, index) => {
@@ -428,7 +495,8 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			svg += `<rect y="${fieldY}" width="${tableWidth}" height="${fieldHeight}" class="field-row${hasNoteClass}" fill="transparent"${noteDataAttr} />`;
 			
 			// Field name
-			let fieldLabel = field.name;
+			const fieldLabelRaw = field.name;
+			const fieldLabel = escapeXml(fieldLabelRaw);
 			let badges = '';
 			
 			if (field.unique) {
@@ -443,7 +511,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			// Icons after field name
 			const iconSize = 20;
 			const iconY = fieldY + (fieldHeight - iconSize) / 2;
-			const textWidth = fieldLabel.length * 5.5;
+			const textWidth = fieldLabelRaw.length * 5.5;
 			let iconX = 12 + textWidth + 4;
 			
 			// PK icon if this field is a primary key

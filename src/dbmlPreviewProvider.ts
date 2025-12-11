@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { Parser } from '@dbml/core';
 import * as path from 'path';
 import { promises as fs } from 'fs';
-import { generateSvgFromSchema, ParsedSchema, ParsedTable, ParsedField, ParsedRef } from './svgGenerator';
+import { generateSvgFromSchema, ParsedSchema, ParsedTable, ParsedField, ParsedRef, ParsedGroup } from './svgGenerator';
 
 interface DiagramViewData {
     id: string;
@@ -16,6 +16,23 @@ interface LayoutData {
     views?: DiagramViewData[];
     activeViewId?: string;
 }
+
+interface TableGroupMetadata {
+    name: string;
+    tables: string[];
+    color?: string;
+    note?: string;
+}
+
+const DEFAULT_GROUP_COLOR = 'var(--vscode-button-background)';
+const GROUP_COLOR_MAP: Record<string, string> = {
+    red: 'var(--vscode-charts-red, #F14C4C)',
+    blue: 'var(--vscode-charts-blue, #3794FF)',
+    green: 'var(--vscode-charts-green, #89D185)',
+    yellow: 'var(--vscode-charts-yellow, #F9DC5C)',
+    orange: 'var(--vscode-charts-orange, #E78C45)',
+    purple: 'var(--vscode-charts-purple, #B180D7)'
+};
 
 export class DbmlPreviewProvider {
 	private panel: vscode.WebviewPanel | undefined;
@@ -96,7 +113,7 @@ export class DbmlPreviewProvider {
 			return;
 		}
 
-		const dbmlContent = document.getText();
+    	const dbmlContent = document.getText();
         const isFileDocument = document.uri.scheme === 'file';
         const documentPath = isFileDocument ? document.uri.fsPath : '';
         let layoutData: LayoutData = {};
@@ -109,7 +126,9 @@ export class DbmlPreviewProvider {
             }
         }
 
-        this.panel.webview.html = this.getWebviewContent(dbmlContent, layoutData, documentPath);
+        const { sanitized, groups } = this.preprocessDbmlContent(dbmlContent);
+
+        this.panel.webview.html = this.getWebviewContent(sanitized, layoutData, documentPath, groups);
 	}
 
     private getLayoutFilePathFromFsPath(documentPath: string): string {
@@ -243,9 +262,138 @@ export class DbmlPreviewProvider {
         await fs.writeFile(layoutFilePath, JSON.stringify(payload, null, 2), 'utf8');
     }
 
-	private convertToSchema(database: any): ParsedSchema {
+    private preprocessDbmlContent(dbmlContent: string): { sanitized: string; groups: TableGroupMetadata[] } {
+        const groupPattern = /TableGroup\s+("[^"]+"|'[^']+'|`[^`]+`|[^\s\[{]+)\s*(\[[^\]]*\])?\s*\{([\s\S]*?)\}/gi;
+        const groups: TableGroupMetadata[] = [];
+        let result = '';
+        let lastIndex = 0;
+        let match: RegExpExecArray | null;
+
+        while ((match = groupPattern.exec(dbmlContent)) !== null) {
+            const [fullMatch, rawName, rawSettings, rawBody] = match;
+            const matchStart = match.index;
+            const matchEnd = groupPattern.lastIndex;
+
+            result += dbmlContent.slice(lastIndex, matchStart);
+
+            const groupName = this.stripIdentifier(rawName);
+            const { color, note: noteFromSettings } = this.parseGroupSettings(rawSettings ?? '');
+
+            const bodyProcessing = this.processGroupBody(rawBody);
+            const note = noteFromSettings ?? bodyProcessing.note;
+            const tables = bodyProcessing.tableNames;
+
+            groups.push({
+                name: groupName,
+                tables,
+                color,
+                note
+            });
+
+            const sanitizedBody = bodyProcessing.sanitizedBody;
+            const trimmedBody = sanitizedBody.replace(/\s+$/, '');
+            const formattedBody = trimmedBody.length > 0 ? `\n${trimmedBody}\n` : '\n';
+            result += `TableGroup ${rawName} {${formattedBody}}`;
+
+            lastIndex = matchEnd;
+        }
+
+        result += dbmlContent.slice(lastIndex);
+        return { sanitized: result, groups };
+    }
+
+    private stripIdentifier(value: string): string {
+        const trimmed = value.trim();
+        if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('`') && trimmed.endsWith('`'))) {
+            return trimmed.slice(1, -1);
+        }
+        return trimmed;
+    }
+
+    private parseGroupSettings(settings: string): { color?: string; note?: string } {
+        if (!settings || settings.length < 2) {
+            return {};
+        }
+        const inner = settings.slice(1, -1);
+        const result: { color?: string; note?: string } = {};
+        const settingPattern = /(\w+)\s*:\s*([^,\]]+)/g;
+        let match: RegExpExecArray | null;
+        while ((match = settingPattern.exec(inner)) !== null) {
+            const key = match[1].toLowerCase();
+            let value = match[2].trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")) || (value.startsWith('`') && value.endsWith('`'))) {
+                value = value.slice(1, -1);
+            }
+            if (key === 'color') {
+                    const normalized = value.trim().toLowerCase();
+                    if (/^[a-z]+$/.test(normalized) && Object.prototype.hasOwnProperty.call(GROUP_COLOR_MAP, normalized)) {
+                        result.color = normalized;
+                    }
+            } else if (key === 'note') {
+                result.note = value;
+            }
+        }
+        return result;
+    }
+
+    private processGroupBody(body: string): { sanitizedBody: string; tableNames: string[]; note?: string } {
+        let workingBody = body;
+        let noteValue: string | undefined;
+
+        const tripleNotePattern = /Note\s*:\s*'''([\s\S]*?)'''/i;
+        const singleNotePattern = /Note\s*:\s*(["'])([\s\S]*?)\1/i;
+
+        let noteMatch = tripleNotePattern.exec(workingBody);
+        if (noteMatch) {
+            noteValue = noteMatch[1].trim();
+            workingBody = workingBody.replace(noteMatch[0], '');
+        } else {
+            noteMatch = singleNotePattern.exec(workingBody);
+            if (noteMatch) {
+                noteValue = noteMatch[2].trim();
+                workingBody = workingBody.replace(noteMatch[0], '');
+            }
+        }
+
+        const lines = workingBody.split(/\r?\n/);
+        const tableNames: string[] = [];
+        const sanitizedLines: string[] = [];
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                sanitizedLines.push(line);
+                continue;
+            }
+            if (/^(--|\/\/|\#)/.test(trimmed)) {
+                sanitizedLines.push(line);
+                continue;
+            }
+            if (/^Note\b/i.test(trimmed)) {
+                continue;
+            }
+            const identifierMatch = trimmed.match(/^([A-Za-z0-9_\.\"`]+)$/);
+            if (identifierMatch) {
+                tableNames.push(this.stripIdentifier(identifierMatch[1]));
+                const indent = line.match(/^\s*/)?.[0] ?? '  ';
+                sanitizedLines.push(`${indent}${identifierMatch[1]}`);
+                continue;
+            }
+            // Preserve any other content to avoid breaking formatting
+            sanitizedLines.push(line);
+        }
+
+        const sanitizedBody = sanitizedLines.join('\n');
+        return { sanitizedBody, tableNames, note: noteValue };
+    }
+
+    private convertToSchema(database: any, metadataGroups: TableGroupMetadata[]): ParsedSchema {
 		const tables: ParsedTable[] = [];
 		const refs: ParsedRef[] = [];
+        const groups: ParsedGroup[] = [];
+        const metadataLookup = new Map<string, TableGroupMetadata>();
+        metadataGroups.forEach(group => {
+            metadataLookup.set(group.name, group);
+        });
 
 		// Extract tables
 		if (database.schemas && database.schemas.length > 0) {
@@ -295,22 +443,48 @@ export class DbmlPreviewProvider {
 					refs.push(parsedRef);
 				});
 			}
+
+            if (schema.tableGroups) {
+                schema.tableGroups.forEach((group: any) => {
+                    const groupName = group.name || '';
+                    const tablesInGroup = (group.tables || []).map((table: any) => table?.name || table?.tableName || '').filter((name: string) => name.length > 0);
+                    const metadata = metadataLookup.get(groupName);
+                    groups.push({
+                        name: groupName,
+                        tables: tablesInGroup,
+                        color: metadata?.color,
+                        note: metadata?.note
+                    });
+                });
+            }
 		}
 
-		return { tables, refs };
+        // Include metadata-defined groups that parser did not return (e.g., empty groups)
+        metadataGroups.forEach(group => {
+            if (!groups.some(existing => existing.name === group.name)) {
+                groups.push({
+                    name: group.name,
+                    tables: group.tables,
+                    color: group.color,
+                    note: group.note
+                });
+            }
+        });
+
+        return { tables, refs, groups };
 	}
 
-    private getWebviewContent(dbmlContent: string, layoutData: LayoutData, documentPath: string): string {
+    private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): string {
 		let svgContent = '';
 		let errorMessage = '';
 
 		try {
 			// Parse DBML
 			// @ts-ignore - @dbml/core types are incomplete
-			const database = Parser.parse(dbmlContent, 'dbml');
+            const database = Parser.parse(sanitizedDbml, 'dbml');
 			
 			// Convert parsed database to our schema format
-			const schema = this.convertToSchema(database);
+            const schema = this.convertToSchema(database, groupMetadata);
 			
 			// Generate SVG from schema
 			svgContent = generateSvgFromSchema(schema);
@@ -320,6 +494,7 @@ export class DbmlPreviewProvider {
 		}
 
         const layoutJson = JSON.stringify(layoutData ?? {}).replace(/</g, '\\u003c');
+        const groupsJson = JSON.stringify(groupMetadata ?? []).replace(/</g, '\\u003c');
         const documentPathJson = JSON.stringify(documentPath ?? '').replace(/</g, '\\u003c');
 
 		return `<!DOCTYPE html>
@@ -1096,6 +1271,56 @@ export class DbmlPreviewProvider {
             });
             const directoryLookup = new Map();
             const allTableNames = Array.from(tableLookup.keys()).sort((a, b) => a.localeCompare(b));
+            const tableGroups = new Map();
+            const defaultGroupColor = ${JSON.stringify(DEFAULT_GROUP_COLOR)};
+            const groupColorMap = ${JSON.stringify(GROUP_COLOR_MAP)};
+            function normalizeGroupColorToken(raw) {
+                if (typeof raw !== 'string') {
+                    return '';
+                }
+                const normalized = raw.trim().toLowerCase();
+                if (!/^[a-z]+$/.test(normalized)) {
+                    return '';
+                }
+                return Object.prototype.hasOwnProperty.call(groupColorMap, normalized) ? normalized : '';
+            }
+            function resolveGroupColor(token) {
+                if (!token) {
+                    return defaultGroupColor;
+                }
+                return groupColorMap[token] || defaultGroupColor;
+            }
+            document.querySelectorAll('.table-group').forEach(groupElement => {
+                const groupName = groupElement.getAttribute('data-group');
+                if (!groupName) {
+                    return;
+                }
+                let tableNames = [];
+                const tablesPayload = groupElement.getAttribute('data-tables');
+                if (tablesPayload) {
+                    try {
+                        const parsed = JSON.parse(tablesPayload);
+                        if (Array.isArray(parsed)) {
+                            tableNames = parsed.filter(item => typeof item === 'string');
+                        }
+                    } catch (error) {
+                        console.warn('Failed to parse table group membership for', groupName, error);
+                    }
+                }
+                const colorToken = normalizeGroupColorToken(groupElement.getAttribute('data-color') || '');
+                const resolvedColor = resolveGroupColor(colorToken);
+                const note = groupElement.getAttribute('data-note') || '';
+                tableGroups.set(groupName, {
+                    name: groupName,
+                    element: groupElement,
+                    tables: tableNames,
+                    colorToken,
+                    color: resolvedColor,
+                    note,
+                    collapsed: false
+                });
+                groupElement.setAttribute('data-resolved-color', resolvedColor);
+            });
             
             let selectedTable = null;
             let offset = { x: 0, y: 0 };
@@ -1140,6 +1365,198 @@ export class DbmlPreviewProvider {
                     name: view.name,
                     tables: Array.isArray(view.tables) ? [...view.tables] : []
                 }));
+            }
+
+            function refreshRelationshipVisibility() {
+                document.querySelectorAll('.relationship-line').forEach(line => {
+                    const fromTable = line.getAttribute('data-from');
+                    const toTable = line.getAttribute('data-to');
+                    const fromElement = fromTable ? tableLookup.get(fromTable) : null;
+                    const toElement = toTable ? tableLookup.get(toTable) : null;
+                    const shouldHide = !fromElement || !toElement ||
+                        fromElement.classList.contains('hidden') ||
+                        toElement.classList.contains('hidden') ||
+                        fromElement.classList.contains('group-collapsed') ||
+                        toElement.classList.contains('group-collapsed');
+                    line.classList.toggle('hidden', shouldHide);
+                });
+            }
+
+            function updateGroupLayouts() {
+                if (tableGroups.size === 0) {
+                    return;
+                }
+                const padding = 24;
+                const headerHeight = 46;
+                const headerGap = 12;
+                tableGroups.forEach(group => {
+                    const element = group.element;
+                    const headerRect = element.querySelector('.table-group-header-bg');
+                    const bodyRect = element.querySelector('.table-group-body');
+                    const shadowRect = element.querySelector('.table-group-shadow');
+                    const title = element.querySelector('.table-group-title');
+                    const toggle = element.querySelector('.table-group-toggle');
+                    if (!headerRect || !bodyRect || !shadowRect || !title || !toggle) {
+                        return;
+                    }
+
+                    let minX = Number.POSITIVE_INFINITY;
+                    let minY = Number.POSITIVE_INFINITY;
+                    let maxX = Number.NEGATIVE_INFINITY;
+                    let maxY = Number.NEGATIVE_INFINITY;
+
+                    group.tables.forEach(tableName => {
+                        const table = tableLookup.get(tableName);
+                        if (!table) {
+                            return;
+                        }
+                        const tableX = parseFloat(table.getAttribute('data-x') || '0');
+                        const tableY = parseFloat(table.getAttribute('data-y') || '0');
+                        const tableWidth = parseFloat(table.getAttribute('data-width') || '250');
+                        const tableHeight = parseFloat(table.getAttribute('data-height') || '0');
+                        if (!Number.isFinite(tableX) || !Number.isFinite(tableY)) {
+                            return;
+                        }
+                        minX = Math.min(minX, tableX);
+                        minY = Math.min(minY, tableY);
+                        maxX = Math.max(maxX, tableX + tableWidth);
+                        maxY = Math.max(maxY, tableY + tableHeight);
+                    });
+
+                    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+                        element.setAttribute('display', 'none');
+                        return;
+                    }
+
+                    element.removeAttribute('display');
+
+                    const headerColor = group.color && group.color.trim().length > 0 ? group.color : defaultGroupColor;
+                    headerRect.setAttribute('fill', headerColor);
+                    bodyRect.setAttribute('fill', headerColor);
+                    bodyRect.setAttribute('fill-opacity', group.collapsed ? '0' : '0.12');
+                    shadowRect.setAttribute('fill', headerColor);
+                    shadowRect.setAttribute('fill-opacity', '0.08');
+
+                    const width = Math.max(240, maxX - minX + padding * 2);
+                    const bodyHeight = group.collapsed ? 0 : Math.max(0, maxY - minY + padding * 2);
+                    const totalHeight = headerHeight + (group.collapsed ? headerGap : headerGap + bodyHeight);
+                    const offsetX = minX - padding;
+                    const offsetY = minY - headerHeight - headerGap;
+
+                    element.setAttribute('transform', 'translate(' + offsetX + ', ' + offsetY + ')');
+                    element.setAttribute('data-collapsed', group.collapsed ? 'true' : 'false');
+                    element.classList.toggle('collapsed', group.collapsed);
+
+                    headerRect.setAttribute('x', '0');
+                    headerRect.setAttribute('y', '0');
+                    headerRect.setAttribute('width', String(width));
+                    headerRect.setAttribute('height', String(headerHeight));
+
+                    const titleX = 20;
+                    const titleY = headerHeight / 2 + 5;
+                    title.setAttribute('x', String(titleX));
+                    title.setAttribute('y', String(titleY));
+
+                    const toggleSize = 22;
+                    const toggleX = width - toggleSize - 16;
+                    const toggleY = (headerHeight - toggleSize) / 2;
+                    toggle.setAttribute('transform', 'translate(' + toggleX + ', ' + toggleY + ')');
+                    const toggleBg = toggle.querySelector('.table-group-toggle-bg');
+                    if (toggleBg) {
+                        toggleBg.setAttribute('width', String(toggleSize));
+                        toggleBg.setAttribute('height', String(toggleSize));
+                    }
+                    const toggleIcon = toggle.querySelector('.table-group-toggle-icon');
+                    if (toggleIcon) {
+                        toggleIcon.setAttribute('d', group.collapsed ? 'M 6 11 L 16 11' : 'M 6 11 L 16 11 M 11 6 L 11 16');
+                    }
+
+                    bodyRect.setAttribute('x', '0');
+                    bodyRect.setAttribute('y', String(headerHeight));
+                    bodyRect.setAttribute('width', String(width));
+                    bodyRect.setAttribute('height', String(Math.max(0, bodyHeight)));
+                    bodyRect.setAttribute('visibility', group.collapsed ? 'hidden' : 'visible');
+
+                    shadowRect.setAttribute('x', '-4');
+                    shadowRect.setAttribute('y', '-4');
+                    shadowRect.setAttribute('width', String(width + 8));
+                    shadowRect.setAttribute('height', String(totalHeight + 8));
+                });
+            }
+
+            function setGroupCollapsed(groupName, nextState) {
+                const group = tableGroups.get(groupName);
+                if (!group) {
+                    return;
+                }
+                const collapsed = typeof nextState === 'boolean' ? nextState : !group.collapsed;
+                group.collapsed = collapsed;
+                group.tables.forEach(tableName => {
+                    const table = tableLookup.get(tableName);
+                    const directoryItem = directoryLookup.get(tableName);
+                    if (table) {
+                        table.classList.toggle('group-collapsed', collapsed);
+                        table.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+                    }
+                    if (directoryItem) {
+                        directoryItem.classList.toggle('group-collapsed', collapsed);
+                    }
+                });
+                updateGroupLayouts();
+                refreshRelationshipVisibility();
+            }
+
+            function initializeGroups() {
+                if (tableGroups.size === 0) {
+                    return;
+                }
+                tableGroups.forEach(group => {
+                    const resolvedColor = group.color && group.color.trim().length > 0 ? group.color : defaultGroupColor;
+                    group.tables.forEach(tableName => {
+                        const table = tableLookup.get(tableName);
+                        if (!table) {
+                            return;
+                        }
+                        table.setAttribute('data-group-color', resolvedColor);
+                        const headerRect = table.querySelector('.table-header');
+                        if (headerRect) {
+                            headerRect.setAttribute('fill', resolvedColor);
+                        }
+                    });
+
+                    const toggle = group.element.querySelector('.table-group-toggle');
+                    if (toggle) {
+                        const handleToggle = (event) => {
+                            event.stopPropagation();
+                            setGroupCollapsed(group.name, !group.collapsed);
+                        };
+                        toggle.addEventListener('click', handleToggle);
+                        toggle.addEventListener('keydown', event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleToggle(event);
+                            }
+                        });
+                    }
+
+                    const headerRect = group.element.querySelector('.table-group-header-bg');
+                    const bodyRect = group.element.querySelector('.table-group-body');
+                    const shadowRect = group.element.querySelector('.table-group-shadow');
+                    if (headerRect) {
+                        headerRect.setAttribute('fill', resolvedColor);
+                    }
+                    if (bodyRect) {
+                        bodyRect.setAttribute('fill', resolvedColor);
+                        bodyRect.setAttribute('fill-opacity', '0.12');
+                    }
+                    if (shadowRect) {
+                        shadowRect.setAttribute('fill', resolvedColor);
+                        shadowRect.setAttribute('fill-opacity', '0.08');
+                    }
+                });
+
+                updateGroupLayouts();
+                refreshRelationshipVisibility();
             }
 
             function getActiveView() {
@@ -1230,14 +1647,9 @@ export class DbmlPreviewProvider {
                     item.classList.toggle('hidden', !shouldShow);
                 });
 
-                document.querySelectorAll('.relationship-line').forEach(line => {
-                    const fromTable = line.getAttribute('data-from');
-                    const toTable = line.getAttribute('data-to');
-                    const shouldShow = !restrict || (fromTable && toTable && set.has(fromTable) && set.has(toTable));
-                    line.classList.toggle('hidden', !shouldShow);
-                });
-
                 updateRelationships();
+                refreshRelationshipVisibility();
+                updateGroupLayouts();
             }
             
             // Collision detection helper
@@ -1529,6 +1941,8 @@ export class DbmlPreviewProvider {
                 
                 // Update relationships
                 updateRelationships();
+                updateGroupLayouts();
+                refreshRelationshipVisibility();
                 
                 // Save state
                 persistState();
@@ -1554,10 +1968,12 @@ export class DbmlPreviewProvider {
                         table.setAttribute('transform', 'translate(' + x + ', ' + y + ')');
                         table.setAttribute('data-x', x);
                         table.setAttribute('data-y', y);
-                        updateRelationships();
                     }
                 });
+                updateRelationships();
             }
+            updateGroupLayouts();
+            refreshRelationshipVisibility();
             
             // Hover effect for tables and relationships
             document.querySelectorAll('.draggable').forEach(table => {
@@ -2099,6 +2515,7 @@ export class DbmlPreviewProvider {
             
             // Initialize table directory
             initializeTableDirectory();
+            initializeGroups();
             
             // Directory toggle button
             if (directoryToggleBtn && tableDirectory) {
