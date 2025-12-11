@@ -4,9 +4,17 @@ import * as path from 'path';
 import { promises as fs } from 'fs';
 import { generateSvgFromSchema, ParsedSchema, ParsedTable, ParsedField, ParsedRef } from './svgGenerator';
 
+interface DiagramViewData {
+    id: string;
+    name: string;
+    tables: string[];
+}
+
 interface LayoutData {
     positions?: Record<string, { x: number; y: number }>;
     viewBox?: { x: number; y: number; width: number; height: number };
+    views?: DiagramViewData[];
+    activeViewId?: string;
 }
 
 export class DbmlPreviewProvider {
@@ -50,10 +58,23 @@ export class DbmlPreviewProvider {
                     }
 
                     try {
-                        await this.saveLayout(documentPath, {
-                            positions: this.sanitizePositions(payload.positions),
-                            viewBox: this.sanitizeViewBox(payload.viewBox)
-                        });
+                        const layoutToSave: LayoutData = {};
+                        const positions = this.sanitizePositions(payload.positions);
+                        if (Object.keys(positions).length > 0) {
+                            layoutToSave.positions = positions;
+                        }
+                        const viewBox = this.sanitizeViewBox(payload.viewBox);
+                        if (viewBox) {
+                            layoutToSave.viewBox = viewBox;
+                        }
+                        const views = this.sanitizeViews(payload.views);
+                        layoutToSave.views = views;
+                        const activeViewId = typeof payload.activeViewId === 'string' && payload.activeViewId.trim().length > 0 ? payload.activeViewId.trim() : undefined;
+                        if (activeViewId) {
+                            layoutToSave.activeViewId = activeViewId;
+                        }
+
+                        await this.saveLayout(documentPath, layoutToSave);
                     } catch (error) {
                         console.error('Failed to save DBML layout data:', error);
                     }
@@ -113,6 +134,14 @@ export class DbmlPreviewProvider {
             if (viewBox) {
                 layout.viewBox = viewBox;
             }
+            const views = this.sanitizeViews(parsed['views']);
+            if (views.length > 0) {
+                layout.views = views;
+            }
+            const activeViewId = typeof parsed['activeViewId'] === 'string' ? parsed['activeViewId'] : undefined;
+            if (activeViewId) {
+                layout.activeViewId = activeViewId;
+            }
             return layout;
         } catch (error) {
             const nodeError = error as NodeJS.ErrnoException;
@@ -163,6 +192,35 @@ export class DbmlPreviewProvider {
         return { x, y, width, height };
     }
 
+    private sanitizeViews(input: unknown): DiagramViewData[] {
+        if (!Array.isArray(input)) {
+            return [];
+        }
+
+        const sanitized: DiagramViewData[] = [];
+        for (const entry of input) {
+            if (!entry || typeof entry !== 'object') {
+                continue;
+            }
+            const raw = entry as Record<string, unknown>;
+            const id = typeof raw.id === 'string' && raw.id.trim().length > 0 ? raw.id.trim() : undefined;
+            const name = typeof raw.name === 'string' && raw.name.trim().length > 0 ? raw.name.trim() : 'Untitled View';
+            const tables = Array.isArray(raw.tables) ? raw.tables.filter(table => typeof table === 'string' && table.trim().length > 0) : [];
+
+            if (!id) {
+                continue;
+            }
+
+            sanitized.push({
+                id,
+                name,
+                tables: Array.from(new Set(tables))
+            });
+        }
+
+        return sanitized;
+    }
+
     private async saveLayout(documentPath: string, layout: LayoutData): Promise<void> {
         const layoutFilePath = this.getLayoutFilePathFromFsPath(documentPath);
         const directory = path.dirname(layoutFilePath);
@@ -174,6 +232,12 @@ export class DbmlPreviewProvider {
         }
         if (layout.viewBox) {
             payload.viewBox = layout.viewBox;
+        }
+        if (layout.views) {
+            payload.views = layout.views;
+        }
+        if (layout.activeViewId) {
+            payload.activeViewId = layout.activeViewId;
         }
 
         await fs.writeFile(layoutFilePath, JSON.stringify(payload, null, 2), 'utf8');
@@ -711,6 +775,186 @@ export class DbmlPreviewProvider {
             line-height: 1.4;
             margin-left: 24px;
         }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .draggable.hidden,
+        .relationship-line.hidden,
+        .table-directory-item.hidden {
+            display: none !important;
+        }
+
+        .diagram-views-panel {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 280px;
+            max-height: calc(100% - 32px);
+            display: none;
+            flex-direction: column;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 6px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+            overflow: hidden;
+            z-index: 25;
+        }
+
+        .diagram-views-panel.open {
+            display: flex;
+        }
+
+        .diagram-views-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background: var(--vscode-editorWidget-background);
+            border-bottom: 1px solid var(--vscode-widget-border);
+            font-weight: 500;
+        }
+
+        .diagram-views-title {
+            font-size: 13px;
+        }
+
+        .diagram-views-close {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            color: var(--vscode-icon-foreground);
+            cursor: pointer;
+        }
+
+        .diagram-views-close:hover {
+            background: var(--vscode-toolbar-hoverBackground);
+        }
+
+        .diagram-views-body {
+            display: flex;
+            flex-direction: column;
+            padding: 12px 14px;
+            gap: 12px;
+            overflow: hidden;
+        }
+
+        .diagram-views-select-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .diagram-views-select {
+            flex: 1;
+            height: 28px;
+            font-size: 12px;
+            padding: 4px 8px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+        }
+
+        .diagram-views-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .diagram-views-button {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 28px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid var(--vscode-button-border, transparent);
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+        }
+
+        .diagram-views-button.primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: var(--vscode-button-border, transparent);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        }
+
+        .diagram-views-button:hover:not(:disabled) {
+            background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+            border-color: var(--vscode-button-hoverBorder, var(--vscode-button-border, transparent));
+        }
+
+        .diagram-views-button.primary:hover:not(:disabled) {
+            background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+            color: var(--vscode-button-foreground);
+        }
+
+        .diagram-views-button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .diagram-views-table-list {
+            flex: 1;
+            overflow: auto;
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 6px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            background: var(--vscode-editorWidget-background);
+        }
+
+        .diagram-views-table-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+        }
+
+        .diagram-views-table-item:hover {
+            background: var(--vscode-toolbar-hoverBackground);
+        }
+
+        .diagram-views-table-item input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+        }
+
+        .diagram-views-empty {
+            padding: 12px;
+            text-align: center;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .diagram-views-footer {
+            display: flex;
+            gap: 8px;
+        }
+
+        .diagram-views-footer .diagram-views-button {
+            flex: 1;
+        }
+
+        .diagram-views-hint {
+            font-size: 11px;
+            opacity: 0.7;
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
@@ -781,10 +1025,42 @@ export class DbmlPreviewProvider {
                     </div>
                 </div>
             </div>
+            <div class="diagram-views-panel" id="diagramViewsPanel">
+                <div class="diagram-views-header">
+                    <div class="diagram-views-title">Diagram Views</div>
+                    <button class="diagram-views-close" id="closeDiagramViewsBtn" title="Close">
+                        <svg width="14" height="14" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                            <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="diagram-views-body">
+                    <div class="diagram-views-select-row">
+                        <select class="diagram-views-select" id="diagramViewsSelect" title="Select a saved view">
+                        </select>
+                        <button class="diagram-views-button" id="diagramViewsNewBtn" title="Create new view">New</button>
+                    </div>
+                    <div class="diagram-views-actions">
+                        <button class="diagram-views-button" id="diagramViewsRenameBtn" title="Rename view">Rename</button>
+                        <button class="diagram-views-button" id="diagramViewsDeleteBtn" title="Delete view">Delete</button>
+                    </div>
+                    <div class="diagram-views-table-list" id="diagramViewsTableList"></div>
+                    <div class="diagram-views-footer">
+                        <button class="diagram-views-button" id="diagramViewsShowAllBtn" title="Show all tables">Show all</button>
+                        <button class="diagram-views-button primary" id="diagramViewsSaveBtn" title="Save current view">Save</button>
+                    </div>
+                    <div class="diagram-views-hint">Select which tables belong to the active view. Use Show all to reset the diagram.</div>
+                </div>
+            </div>
             <div class="toolbar">
                 <button class="toolbar-button directory-toggle" id="directoryToggleBtn" title="Toggle table directory">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
                         <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/>
+                    </svg>
+                </button>
+                <button class="toolbar-button" id="diagramViewsToggleBtn" title="Toggle diagram views panel">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                        <path d="M4 5h5v5H4V5zm0 9h5v5H4v-5zm11-9h5v5h-5V5zm0 9h5v5h-5v-5z"/>
                     </svg>
                 </button>
                 <button class="toolbar-button" id="autoArrangeBtn" title="Auto arrange diagram">
@@ -816,6 +1092,7 @@ export class DbmlPreviewProvider {
                 }
             });
             const directoryLookup = new Map();
+            const allTableNames = Array.from(tableLookup.keys()).sort((a, b) => a.localeCompare(b));
             
             let selectedTable = null;
             let offset = { x: 0, y: 0 };
@@ -829,6 +1106,23 @@ export class DbmlPreviewProvider {
 			
             const state = vscode.getState() || {};
             let positions = {};
+            let diagramViews = Array.isArray(state.views)
+                ? JSON.parse(JSON.stringify(state.views))
+                : Array.isArray(initialLayoutData.views)
+                    ? JSON.parse(JSON.stringify(initialLayoutData.views))
+                    : [];
+            if (!Array.isArray(diagramViews)) {
+                diagramViews = [];
+            }
+            let activeViewId = typeof state.activeViewId === 'string'
+                ? state.activeViewId
+                : typeof initialLayoutData.activeViewId === 'string'
+                    ? initialLayoutData.activeViewId
+                    : '';
+            if (activeViewId && !diagramViews.some(view => view && view.id === activeViewId)) {
+                activeViewId = '';
+            }
+            let pendingViewTables = new Set();
             if (state.positions && typeof state.positions === 'object') {
                 positions = JSON.parse(JSON.stringify(state.positions));
             } else if (initialLayoutData.positions && typeof initialLayoutData.positions === 'object') {
@@ -836,6 +1130,29 @@ export class DbmlPreviewProvider {
             }
             const savedViewBox = state.viewBox || initialLayoutData.viewBox;
             let layoutSaveTimeout = null;
+
+            function cloneViews() {
+                return diagramViews.map(view => ({
+                    id: view.id,
+                    name: view.name,
+                    tables: Array.isArray(view.tables) ? [...view.tables] : []
+                }));
+            }
+
+            function getActiveView() {
+                if (!activeViewId) {
+                    return null;
+                }
+                return diagramViews.find(view => view.id === activeViewId) || null;
+            }
+
+            function persistState() {
+                state.positions = positions;
+                state.viewBox = viewBox;
+                state.views = cloneViews();
+                state.activeViewId = activeViewId;
+                vscode.setState(state);
+            }
 			
             function sendLayoutUpdate() {
                 if (!layoutCanPersist) {
@@ -852,12 +1169,16 @@ export class DbmlPreviewProvider {
                     height: viewBox.height
                 };
 
+                const clonedViews = cloneViews();
+
                 vscode.postMessage({
                     type: 'saveLayout',
                     payload: {
                         documentPath,
                         positions: clonedPositions,
-                        viewBox: clonedViewBox
+                        viewBox: clonedViewBox,
+                        views: clonedViews,
+                        activeViewId: activeViewId
                     }
                 });
             }
@@ -875,6 +1196,45 @@ export class DbmlPreviewProvider {
                     layoutSaveTimeout = null;
                     sendLayoutUpdate();
                 }, 250);
+            }
+
+            function ensurePendingViewTables() {
+                const activeView = getActiveView();
+                if (activeView && Array.isArray(activeView.tables) && activeView.tables.length > 0) {
+                    const filtered = activeView.tables.filter(name => typeof name === 'string' && tableLookup.has(name));
+                    pendingViewTables = filtered.length > 0 ? new Set(filtered) : new Set(allTableNames);
+                } else {
+                    pendingViewTables = new Set(allTableNames);
+                }
+            }
+
+            function applyViewTables(tableNames) {
+                const hadRequestedTables = Array.isArray(tableNames) && tableNames.length > 0;
+                const normalized = Array.isArray(tableNames) ? tableNames.filter(name => typeof name === 'string' && tableLookup.has(name)) : [];
+                const set = new Set(normalized);
+                let restrict = set.size < tableLookup.size;
+                if (set.size === 0) {
+                    restrict = hadRequestedTables ? false : true;
+                }
+
+                tableLookup.forEach((table, name) => {
+                    const shouldShow = !restrict || set.has(name);
+                    table.classList.toggle('hidden', !shouldShow);
+                });
+
+                directoryLookup.forEach((item, name) => {
+                    const shouldShow = !restrict || set.has(name);
+                    item.classList.toggle('hidden', !shouldShow);
+                });
+
+                document.querySelectorAll('.relationship-line').forEach(line => {
+                    const fromTable = line.getAttribute('data-from');
+                    const toTable = line.getAttribute('data-to');
+                    const shouldShow = !restrict || (fromTable && toTable && set.has(fromTable) && set.has(toTable));
+                    line.classList.toggle('hidden', !shouldShow);
+                });
+
+                updateRelationships();
             }
             
             // Collision detection helper
@@ -1168,8 +1528,7 @@ export class DbmlPreviewProvider {
                 updateRelationships();
                 
                 // Save state
-                state.positions = positions;
-                vscode.setState(state);
+                persistState();
                 scheduleLayoutSave();
             }
             
@@ -1249,8 +1608,7 @@ export class DbmlPreviewProvider {
                 svg.setAttribute('viewBox', viewBox.x + ' ' + viewBox.y + ' ' + viewBox.width + ' ' + viewBox.height);
                 
                 // Save viewBox state
-                state.viewBox = viewBox;
-                vscode.setState(state);
+                persistState();
                 scheduleLayoutSave();
             });
             
@@ -1352,10 +1710,8 @@ export class DbmlPreviewProvider {
                     
                     if (tableName) {
                         positions[tableName] = { x, y };
-                        state.positions = positions;
                     }
-                    state.viewBox = viewBox;
-                    vscode.setState(state);
+                    persistState();
                     scheduleLayoutSave();
                     
                     isDragging = false;
@@ -1364,8 +1720,7 @@ export class DbmlPreviewProvider {
                 
                 if (isPanning) {
                     container.classList.remove('panning');
-                    state.viewBox = viewBox;
-                    vscode.setState(state);
+                    persistState();
                     scheduleLayoutSave();
                     isPanning = false;
                 }
@@ -1604,6 +1959,99 @@ export class DbmlPreviewProvider {
                     tableDirectoryContent.appendChild(item);
                 });
             }
+
+            function renderDiagramViewsSelect(diagramViewsSelect) {
+                if (!diagramViewsSelect) {
+                    return;
+                }
+
+                diagramViewsSelect.innerHTML = '';
+
+                const allOption = document.createElement('option');
+                allOption.value = '__all__';
+                allOption.textContent = 'All tables';
+                diagramViewsSelect.appendChild(allOption);
+
+                diagramViews.forEach(view => {
+                    if (!view) {
+                        return;
+                    }
+                    const option = document.createElement('option');
+                    option.value = view.id;
+                    option.textContent = view.name;
+                    diagramViewsSelect.appendChild(option);
+                });
+
+                const hasActiveView = Boolean(activeViewId && diagramViews.some(view => view.id === activeViewId));
+                diagramViewsSelect.value = hasActiveView ? activeViewId : '__all__';
+            }
+
+            function renderDiagramViewsTableList(container, onToggle) {
+                if (!container) {
+                    return;
+                }
+
+                container.innerHTML = '';
+
+                if (tableLookup.size === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'diagram-views-empty';
+                    empty.textContent = 'No tables detected in this diagram.';
+                    container.appendChild(empty);
+                    return;
+                }
+
+                allTableNames.forEach(tableName => {
+                    const item = document.createElement('label');
+                    item.className = 'diagram-views-table-item';
+                    item.setAttribute('data-table', tableName);
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = pendingViewTables.has(tableName);
+                    checkbox.addEventListener('change', () => {
+                        if (checkbox.checked) {
+                            pendingViewTables.add(tableName);
+                        } else {
+                            pendingViewTables.delete(tableName);
+                        }
+                        if (typeof onToggle === 'function') {
+                            onToggle();
+                        }
+                    });
+
+                    const label = document.createElement('span');
+                    label.textContent = tableName;
+
+                    item.appendChild(checkbox);
+                    item.appendChild(label);
+                    container.appendChild(item);
+                });
+            }
+
+            function updateDiagramViewsButtonState(buttons) {
+                if (!buttons) {
+                    return;
+                }
+                const activeView = getActiveView();
+                const hasActive = Boolean(activeView);
+                const { renameBtn, deleteBtn, saveBtn } = buttons;
+
+                if (renameBtn) {
+                    renameBtn.disabled = !hasActive;
+                }
+                if (deleteBtn) {
+                    deleteBtn.disabled = !hasActive;
+                }
+                if (saveBtn) {
+                    saveBtn.disabled = !hasActive;
+                }
+            }
+
+            function persistViewsAndScheduleSave() {
+                persistState();
+                scheduleLayoutSave();
+            }
             
             // Select table function
             function selectTable(tableName) {
@@ -1635,6 +2083,16 @@ export class DbmlPreviewProvider {
             const directoryToggleBtn = document.getElementById('directoryToggleBtn');
             const tableDirectory = document.getElementById('tableDirectory');
             const closeDirectoryBtn = document.getElementById('closeDirectoryBtn');
+            const diagramViewsToggleBtn = document.getElementById('diagramViewsToggleBtn');
+            const diagramViewsPanel = document.getElementById('diagramViewsPanel');
+            const closeDiagramViewsBtn = document.getElementById('closeDiagramViewsBtn');
+            const diagramViewsSelect = document.getElementById('diagramViewsSelect');
+            const diagramViewsNewBtn = document.getElementById('diagramViewsNewBtn');
+            const diagramViewsRenameBtn = document.getElementById('diagramViewsRenameBtn');
+            const diagramViewsDeleteBtn = document.getElementById('diagramViewsDeleteBtn');
+            const diagramViewsTableList = document.getElementById('diagramViewsTableList');
+            const diagramViewsShowAllBtn = document.getElementById('diagramViewsShowAllBtn');
+            const diagramViewsSaveBtn = document.getElementById('diagramViewsSaveBtn');
             
             // Initialize table directory
             initializeTableDirectory();
@@ -1691,10 +2149,172 @@ export class DbmlPreviewProvider {
                 resetZoomBtn.addEventListener('click', () => {
                     viewBox = { x: 0, y: 0, width: 2000, height: 2000 };
                     svg.setAttribute('viewBox', '0 0 2000 2000');
-                    state.viewBox = viewBox;
-                    vscode.setState(state);
-                    scheduleLayoutSave();
+                    persistViewsAndScheduleSave();
                 });
+            }
+
+            if (diagramViewsPanel && diagramViewsToggleBtn) {
+                const buttons = {
+                    renameBtn: diagramViewsRenameBtn,
+                    deleteBtn: diagramViewsDeleteBtn,
+                    saveBtn: diagramViewsSaveBtn
+                };
+
+                const refreshUi = () => {
+                    renderDiagramViewsSelect(diagramViewsSelect);
+                    renderDiagramViewsTableList(diagramViewsTableList, () => {
+                        applyViewTables(Array.from(pendingViewTables));
+                    });
+                    updateDiagramViewsButtonState(buttons);
+                };
+
+                const showPanel = () => {
+                    ensurePendingViewTables();
+                    refreshUi();
+                    diagramViewsPanel.classList.add('open');
+                    diagramViewsToggleBtn.classList.add('active');
+                };
+
+                const hidePanel = () => {
+                    diagramViewsPanel.classList.remove('open');
+                    diagramViewsToggleBtn.classList.remove('active');
+                };
+
+                diagramViewsToggleBtn.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    if (diagramViewsPanel.classList.contains('open')) {
+                        hidePanel();
+                    } else {
+                        showPanel();
+                    }
+                });
+
+                if (closeDiagramViewsBtn) {
+                    closeDiagramViewsBtn.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        hidePanel();
+                    });
+                }
+
+                document.addEventListener('click', (event) => {
+                    if (!diagramViewsPanel.contains(event.target) && !diagramViewsToggleBtn.contains(event.target)) {
+                        hidePanel();
+                    }
+                });
+
+                if (diagramViewsSelect) {
+                    diagramViewsSelect.addEventListener('change', () => {
+                        const newValue = diagramViewsSelect.value;
+                        if (newValue === '__all__') {
+                            activeViewId = '';
+                            pendingViewTables = new Set(allTableNames);
+                            applyViewTables(allTableNames);
+                        } else {
+                            activeViewId = newValue;
+                            const activeView = getActiveView();
+                            ensurePendingViewTables();
+                            const tablesToShow = activeView && Array.isArray(activeView.tables) && activeView.tables.length > 0
+                                ? activeView.tables
+                                : allTableNames;
+                            applyViewTables(tablesToShow);
+                        }
+                        persistViewsAndScheduleSave();
+                        renderDiagramViewsTableList(diagramViewsTableList, () => {
+                            applyViewTables(Array.from(pendingViewTables));
+                        });
+                        updateDiagramViewsButtonState(buttons);
+                    });
+                }
+
+                if (diagramViewsNewBtn) {
+                    diagramViewsNewBtn.addEventListener('click', () => {
+                        const name = prompt('Name for the new view', 'New View');
+                        if (!name || !name.trim()) {
+                            return;
+                        }
+
+                        const id = 'view_' + Date.now().toString(36);
+                        const tables = Array.from(pendingViewTables.size > 0 ? pendingViewTables : new Set(allTableNames));
+
+                        diagramViews.push({
+                            id,
+                            name: name.trim(),
+                            tables
+                        });
+                        activeViewId = id;
+                        pendingViewTables = new Set(tables);
+                        applyViewTables(tables);
+                        persistViewsAndScheduleSave();
+                        refreshUi();
+                    });
+                }
+
+                if (diagramViewsRenameBtn) {
+                    diagramViewsRenameBtn.addEventListener('click', () => {
+                        const activeView = getActiveView();
+                        if (!activeView) {
+                            return;
+                        }
+
+                        const newName = prompt('Rename view', activeView.name);
+                        if (!newName || !newName.trim()) {
+                            return;
+                        }
+
+                        activeView.name = newName.trim();
+                        persistViewsAndScheduleSave();
+                        renderDiagramViewsSelect(diagramViewsSelect);
+                    });
+                }
+
+                if (diagramViewsDeleteBtn) {
+                    diagramViewsDeleteBtn.addEventListener('click', () => {
+                        const activeView = getActiveView();
+                        if (!activeView) {
+                            return;
+                        }
+
+                        const confirmed = confirm('Delete view "' + activeView.name + '"?');
+                        if (!confirmed) {
+                            return;
+                        }
+
+                        diagramViews = diagramViews.filter(view => view.id !== activeView.id);
+                        activeViewId = '';
+                        pendingViewTables = new Set(allTableNames);
+                        applyViewTables(allTableNames);
+                        persistViewsAndScheduleSave();
+                        refreshUi();
+                    });
+                }
+
+                if (diagramViewsShowAllBtn) {
+                    diagramViewsShowAllBtn.addEventListener('click', () => {
+                        activeViewId = '';
+                        pendingViewTables = new Set(allTableNames);
+                        applyViewTables(allTableNames);
+                        persistViewsAndScheduleSave();
+                        refreshUi();
+                    });
+                }
+
+                if (diagramViewsSaveBtn) {
+                    diagramViewsSaveBtn.addEventListener('click', () => {
+                        const activeView = getActiveView();
+                        if (!activeView) {
+                            return;
+                        }
+
+                        activeView.tables = Array.from(pendingViewTables);
+                        applyViewTables(activeView.tables);
+                        persistViewsAndScheduleSave();
+                        refreshUi();
+                    });
+                }
+
+                ensurePendingViewTables();
+                applyViewTables(activeViewId ? Array.from(pendingViewTables) : allTableNames);
+                updateDiagramViewsButtonState(buttons);
             }
             
             // Note tooltip functionality
