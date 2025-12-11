@@ -75,50 +75,11 @@ function calculateOrthogonalPath(startX: number, startY: number, stubStartX: num
 	// First horizontal stub from table edge
 	path += ` L ${stubStartX} ${startY}`;
 	
-	const dy = endY - startY;
-	const dx = stubEndX - stubStartX;
+	// Vertical segment (straight 90 degree turn)
+	path += ` L ${stubStartX} ${endY}`;
 	
-	// Create path with proper direction handling
-	if (Math.abs(dy) > radius * 2) {
-		// Determine direction for proper radius application
-		const goingRight = dx > 0;
-		const goingDown = dy > 0;
-		
-		// First turn at start stub point (horizontal to vertical)
-		if (goingDown) {
-			path += ` Q ${stubStartX} ${startY} ${stubStartX} ${startY + radius}`;
-		} else {
-			path += ` Q ${stubStartX} ${startY} ${stubStartX} ${startY - radius}`;
-		}
-		
-		// Vertical segment
-		if (goingDown) {
-			path += ` L ${stubStartX} ${endY - radius}`;
-		} else {
-			path += ` L ${stubStartX} ${endY + radius}`;
-		}
-		
-		// Second turn (from vertical to horizontal towards end stub)
-		if (goingRight) {
-			path += ` Q ${stubStartX} ${endY} ${stubStartX + radius} ${endY}`;
-		} else {
-			path += ` Q ${stubStartX} ${endY} ${stubStartX - radius} ${endY}`;
-		}
-		
-		// Horizontal segment to end stub
-		if (goingRight) {
-			path += ` L ${stubEndX - radius} ${endY}`;
-		} else {
-			path += ` L ${stubEndX + radius} ${endY}`;
-		}
-		
-		// Final turn at end stub point (horizontal back to table edge direction)
-		// This is actually not needed since stubEndX and endX are on same Y
-		// Just continue with straight line
-	} else {
-		// If vertical distance is too small for curves, just draw straight horizontal line
-		path += ` L ${stubEndX} ${startY}`;
-	}
+	// Horizontal segment to end stub
+	path += ` L ${stubEndX} ${endY}`;
 	
 	// Final horizontal stub to table edge
 	path += ` L ${endX} ${endY}`;
@@ -157,6 +118,24 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 
 	// Infinite canvas with viewBox
 	let svg = `<svg width="100%" height="100%" viewBox="0 0 2000 2000" xmlns="http://www.w3.org/2000/svg" id="diagram-svg" style="background: var(--vscode-editor-background);">`;
+	
+	// Define markers for cardinality indicators
+	svg += `<defs>`;
+	// Marker for "many" (*) - circle
+	svg += `<marker id="many-marker" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">`;
+	svg += `<circle cx="5" cy="5" r="3" class="cardinality-marker" />`;
+	svg += `</marker>`;
+	// Marker for "one" (1) - perpendicular line
+	svg += `<marker id="one-marker" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">`;
+	svg += `<line x1="5" y1="1" x2="5" y2="9" class="cardinality-marker" stroke-width="2" />`;
+	svg += `</marker>`;
+	// Marker for "zero or one" (0..1) - circle with line
+	svg += `<marker id="zero-one-marker" markerWidth="14" markerHeight="10" refX="7" refY="5" orient="auto">`;
+	svg += `<circle cx="4" cy="5" r="2.5" class="cardinality-marker" fill="none" />`;
+	svg += `<line x1="10" y1="1" x2="10" y2="9" class="cardinality-marker" stroke-width="2" />`;
+	svg += `</marker>`;
+	svg += `</defs>`;
+	
 	svg += '<g id="relationships">';
 
 	// Draw relationships first (so they appear behind tables)
@@ -228,15 +207,30 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				const fromRelation = fromEndpoint.relation || '*';
 				const toRelation = toEndpoint.relation || '1';
 				
-				// Build cardinality label (e.g., "1:n", "1:1", "0:1")
-				let cardinalityLabel = `${fromRelation}:${toRelation}`;
+				// Determine which markers to use
+				let markerStart = '';
+				let markerEnd = '';
+				
+				// From side marker (start of line)
+				if (fromRelation === '*' || fromRelation === 'n') {
+					markerStart = 'url(#many-marker)';
+				} else if (fromRelation === '1') {
+					markerStart = 'url(#one-marker)';
+				} else if (fromRelation === '0..1' || fromRelation === '?') {
+					markerStart = 'url(#zero-one-marker)';
+				}
+				
+				// To side marker (end of line)
+				if (toRelation === '*' || toRelation === 'n') {
+					markerEnd = 'url(#many-marker)';
+				} else if (toRelation === '1') {
+					markerEnd = 'url(#one-marker)';
+				} else if (toRelation === '0..1' || toRelation === '?') {
+					markerEnd = 'url(#zero-one-marker)';
+				}
 				
 				// Calculate orthogonal path with stub points to prevent edge alignment
 				const pathData = calculateOrthogonalPath(fromX, fromY, fromStubX, toX, toY, toStubX, gridSize, 15);
-				
-				// Calculate midpoint for label placement
-				const midX = (fromX + toX) / 2;
-				const midY = (fromY + toY) / 2;
 				
 				svg += `<path 
 					d="${pathData}"
@@ -253,19 +247,9 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					data-to-field-offset="${toFieldIndex}"
 					data-from-side="${sides.fromSide}"
 					data-to-side="${sides.toSide}"
+					marker-start="${markerStart}"
+					marker-end="${markerEnd}"
 				/>`;
-				
-				// Add cardinality label
-				svg += `<text 
-					x="${midX}" 
-					y="${midY - 5}" 
-					class="cardinality-label"
-					data-from="${fromEndpoint.tableName}"
-					data-to="${toEndpoint.tableName}"
-					text-anchor="middle" 
-					font-size="11"
-					font-weight="bold"
-				>${cardinalityLabel}</text>`;
 			}
 		}
 	});

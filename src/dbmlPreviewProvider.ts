@@ -191,19 +191,33 @@ export class DbmlPreviewProvider {
             stroke: var(--vscode-editor-foreground);
             stroke-width: 2;
             fill: none;
-            opacity: 0.25;
-            transition: opacity 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease;
-            stroke-dasharray: 5, 5;
-            animation: dash-flow 20s linear infinite;
+            opacity: 0.3;
+            transition: opacity 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease, stroke-dasharray 0.2s ease;
+            stroke-dasharray: none;
         }
         
         svg .relationship-line.active {
             opacity: 1;
             stroke: var(--vscode-button-background);
-            stroke-width: 3;
+            stroke-width: 2.5;
             filter: brightness(1.2) saturate(1.3);
             stroke-dasharray: 8, 4;
             animation: dash-flow-active 1.5s linear infinite;
+        }
+        
+        svg .cardinality-marker {
+            fill: var(--vscode-editor-foreground);
+            stroke: var(--vscode-editor-foreground);
+            opacity: 0.3;
+            transition: opacity 0.2s ease, fill 0.2s ease, stroke 0.2s ease;
+        }
+        
+        svg .relationship-line.active ~ marker .cardinality-marker,
+        svg path.active + marker .cardinality-marker {
+            opacity: 1;
+            fill: var(--vscode-button-background);
+            stroke: var(--vscode-button-background);
+            filter: brightness(1.2) saturate(1.3);
         }
         
         @keyframes dash-flow {
@@ -216,20 +230,6 @@ export class DbmlPreviewProvider {
             to {
                 stroke-dashoffset: -50;
             }
-        }
-        
-        svg .cardinality-label {
-            fill: var(--vscode-editor-foreground);
-            opacity: 0.4;
-            transition: opacity 0.2s ease, fill 0.2s ease;
-            pointer-events: none;
-        }
-        
-        svg .cardinality-label.active {
-            opacity: 1;
-            fill: var(--vscode-button-background);
-            font-weight: bold;
-            filter: brightness(1.2) saturate(1.3);
         }
         
         svg .table-name {
@@ -352,19 +352,7 @@ export class DbmlPreviewProvider {
                         }
                     }
                 });
-                
-                document.querySelectorAll('.cardinality-label').forEach(label => {
-                    const fromTable = label.getAttribute('data-from');
-                    const toTable = label.getAttribute('data-to');
-                    
-                    if (fromTable === tableName || toTable === tableName) {
-                        if (highlight) {
-                            label.classList.add('active');
-                        } else {
-                            label.classList.remove('active');
-                        }
-                    }
-                });
+
             }
             
             // Zoom with mouse wheel
@@ -531,48 +519,11 @@ export class DbmlPreviewProvider {
                 // First horizontal stub from table edge
                 path += ' L ' + stubStartX + ' ' + startY;
                 
-                const dy = endY - startY;
-                const dx = stubEndX - stubStartX;
+                // Vertical segment (straight 90 degree turn)
+                path += ' L ' + stubStartX + ' ' + endY;
                 
-                // Create path with proper direction handling
-                if (Math.abs(dy) > radius * 2) {
-                    // Determine direction for proper radius application
-                    const goingRight = dx > 0;
-                    const goingDown = dy > 0;
-                    
-                    // First turn at start stub point (horizontal to vertical)
-                    if (goingDown) {
-                        path += ' Q ' + stubStartX + ' ' + startY + ' ' + stubStartX + ' ' + (startY + radius);
-                    } else {
-                        path += ' Q ' + stubStartX + ' ' + startY + ' ' + stubStartX + ' ' + (startY - radius);
-                    }
-                    
-                    // Vertical segment
-                    if (goingDown) {
-                        path += ' L ' + stubStartX + ' ' + (endY - radius);
-                    } else {
-                        path += ' L ' + stubStartX + ' ' + (endY + radius);
-                    }
-                    
-                    // Second turn (from vertical to horizontal towards end stub)
-                    if (goingRight) {
-                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX + radius) + ' ' + endY;
-                    } else {
-                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX - radius) + ' ' + endY;
-                    }
-                    
-                    // Horizontal segment to end stub
-                    if (goingRight) {
-                        path += ' L ' + (stubEndX - radius) + ' ' + endY;
-                    } else {
-                        path += ' L ' + (stubEndX + radius) + ' ' + endY;
-                    }
-                    
-                    // Final turn at end stub point is not needed, continue straight
-                } else {
-                    // If vertical distance is too small for curves, just draw straight horizontal line
-                    path += ' L ' + stubEndX + ' ' + startY;
-                }
+                // Horizontal segment to end stub
+                path += ' L ' + stubEndX + ' ' + endY;
                 
                 // Final horizontal stub to table edge
                 path += ' L ' + endX + ' ' + endY;
@@ -637,15 +588,6 @@ export class DbmlPreviewProvider {
                         
                         const pathData = calculateOrthogonalPath(fromX, fromY, fromStubX, toX, toY, toStubX, 15);
                         line.setAttribute('d', pathData);
-                        
-                        // Update cardinality label position
-                        const label = document.querySelector('.cardinality-label[data-from="' + fromTableName + '"][data-to="' + toTableName + '"]');
-                        if (label) {
-                            const midX = (fromX + toX) / 2;
-                            const midY = (fromY + toY) / 2;
-                            label.setAttribute('x', midX);
-                            label.setAttribute('y', midY - 5);
-                        }
                     }
                 });
             }
