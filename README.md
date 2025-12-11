@@ -1,4 +1,4 @@
-![NOISE DBML icon](media/extension-icon.svg)
+![NOISE DBML icon](src/resources/icon.png)
 
 # NOISE DBML
 
