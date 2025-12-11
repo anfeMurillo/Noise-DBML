@@ -232,7 +232,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	});
 
 	// Infinite canvas with viewBox
-	let svg = `<svg width="100%" height="100%" viewBox="0 0 2000 2000" xmlns="http://www.w3.org/2000/svg" id="diagram-svg" style="background: var(--vscode-editor-background);">`;
+	let svg = `<svg width="100%" height="100%" viewBox="0 0 2000 2000" xmlns="http://www.w3.org/2000/svg" id="diagram-svg" style="background: transparent;">`;
 	
 	// Define markers for cardinality indicators
 	svg += `<defs>`;

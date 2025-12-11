@@ -525,6 +525,59 @@ export class DbmlPreviewProvider {
             height: 100%;
             overflow: hidden;
             cursor: grab;
+            position: relative;
+            background: var(--vscode-editor-background);
+            --grid-line-color-thin: color-mix(in srgb, var(--vscode-editor-foreground) 16%, transparent);
+            --grid-line-color-bold: color-mix(in srgb, var(--vscode-editor-foreground) 28%, transparent);
+            --grid-cell-width: 20px;
+            --grid-cell-height: 20px;
+            --grid-major-width: 100px;
+            --grid-major-height: 100px;
+            --grid-offset-x: 0px;
+            --grid-offset-y: 0px;
+        }
+
+        @supports not (color-mix(in srgb, #000 50%, transparent)) {
+            .diagram-container {
+                --grid-line-color-thin: rgba(120, 120, 120, 0.22);
+                --grid-line-color-bold: rgba(120, 120, 120, 0.38);
+            }
+        }
+
+        .diagram-container > svg {
+            position: relative;
+            z-index: 1;
+        }
+
+        .canvas-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            opacity: 0;
+            background-image:
+                linear-gradient(to right, var(--grid-line-color-thin) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-line-color-thin) 1px, transparent 1px),
+                linear-gradient(to right, var(--grid-line-color-bold) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-line-color-bold) 1px, transparent 1px);
+            background-size:
+                var(--grid-cell-width) var(--grid-cell-height),
+                var(--grid-cell-width) var(--grid-cell-height),
+                var(--grid-major-width) var(--grid-major-height),
+                var(--grid-major-width) var(--grid-major-height);
+            background-position:
+                var(--grid-offset-x) var(--grid-offset-y),
+                var(--grid-offset-x) var(--grid-offset-y),
+                var(--grid-offset-x) var(--grid-offset-y),
+                var(--grid-offset-x) var(--grid-offset-y);
+            transition: opacity 0.2s ease;
+            z-index: 0;
+        }
+
+        .diagram-container.grid-visible .canvas-grid {
+            opacity: 0.75;
         }
         
         .diagram-container.panning {
@@ -1184,6 +1237,7 @@ export class DbmlPreviewProvider {
                 </div>
             </div>
             <div class="diagram-container">
+                <div class="canvas-grid" id="canvasGrid"></div>
                 ${svgContent}
             </div>
             <div class="side-panel" id="sidePanel">
@@ -1274,6 +1328,11 @@ export class DbmlPreviewProvider {
                         <path d="M42.56,26.854c0.391-0.391,0.391-1.023,0-1.414l-4.685-4.686c-0.188-0.188-0.442-0.293-0.707-0.293s-0.52,0.105-0.707,0.293l-9.979,9.979c-0.799,0.775-1.823,1.202-2.883,1.202c-0.937,0-1.801-0.348-2.432-0.979c-1.387-1.387-1.281-3.776,0.231-5.323c0.076-0.076,3.404-3.405,6.2-6.201c0,0,0,0,0,0s0,0,0,0c1.902-1.902,3.56-3.56,3.769-3.769c0.391-0.391,0.391-1.023,0-1.414l-4.685-4.686c-0.188-0.188-0.442-0.293-0.708-0.293c0,0,0,0-0.001,0c-0.266,0.001-0.521,0.107-0.708,0.295c-0.042,0.043-1.747,1.748-3.767,3.768l0,0l0,0c-0.038,0.038-0.075,0.075-0.113,0.113c-2.974,2.974-6.57,6.57-6.589,6.59C9.785,25.162,9.54,33.164,14.25,37.874c2.19,2.19,5.162,3.396,8.368,3.396c3.484,0,6.833-1.387,9.425-3.901C32.104,37.311,42.455,26.959,42.56,26.854z M25.976,11.685l3.271,3.271c-0.873,0.873-1.639,1.639-2.356,2.355l-3.271-3.271C24.577,13.084,25.419,12.242,25.976,11.685z M30.654,35.93c-2.221,2.154-5.075,3.341-8.036,3.341c-2.672,0-5.142-0.998-6.954-2.811c-3.938-3.938-3.686-10.679,0.56-15.021c0.072-0.072,3.176-3.176,5.983-5.984l3.271,3.271c-5.475,5.475-5.504,5.505-5.505,5.506c-2.279,2.33-2.377,5.981-0.22,8.14c1.009,1.009,2.375,1.564,3.846,1.564c1.582,0,3.101-0.627,4.286-1.777l5.505-5.505l3.271,3.271C33.85,32.735,30.743,35.842,30.654,35.93z M38.075,28.511l-3.271-3.271l2.364-2.364l3.271,3.271C39.881,26.705,39.035,27.55,38.075,28.511z"/>
                     </svg>
                 </button>
+                <button class="toolbar-button" id="gridToggleBtn" title="Toggle canvas grid">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                        <path d="M3 3h5v5H3V3zm6 0h5v5H9V3zm6 0h5v5h-5V3zM3 9h5v5H3V9zm6 0h5v5H9V9zm6 0h5v5h-5V9zM3 15h5v5H3v-5zm6 0h5v5H9v-5zm6 0h5v5h-5v-5z"/>
+                    </svg>
+                </button>
                 <button class="toolbar-button" id="resetZoomBtn" title="Reset zoom and pan">
                     <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
                         <path d="M20.921,31.898c2.758,0,5.367-0.956,7.458-2.704l1.077,1.077l-0.358,0.358c-0.188,0.188-0.293,0.442-0.293,0.707s0.105,0.52,0.293,0.707l8.257,8.256c0.195,0.195,0.451,0.293,0.707,0.293s0.512-0.098,0.707-0.293l2.208-2.208c0.188-0.188,0.293-0.442,0.293-0.707s-0.105-0.52-0.293-0.707l-8.257-8.256c-0.391-0.391-1.023-0.391-1.414,0l-0.436,0.436l-1.073-1.073c1.793-2.104,2.777-4.743,2.777-7.537c0-3.112-1.212-6.038-3.413-8.239s-5.127-3.413-8.239-3.413s-6.038,1.212-8.238,3.413c-2.201,2.201-3.413,5.126-3.413,8.239c0,3.112,1.212,6.038,3.413,8.238C14.883,30.687,17.809,31.898,20.921,31.898z M38.855,37.385l-0.794,0.793l-6.843-6.842l0.794-0.793L38.855,37.385z M14.097,13.423c1.823-1.823,4.246-2.827,6.824-2.827s5.002,1.004,6.825,2.827c1.823,1.823,2.827,4.247,2.827,6.825c0,2.578-1.004,5.001-2.827,6.824c-1.823,1.823-4.247,2.827-6.825,2.827s-5.001-1.004-6.824-2.827c-1.823-1.823-2.827-4.247-2.827-6.824C11.27,17.669,12.273,15.246,14.097,13.423z"/>
@@ -1288,6 +1347,8 @@ export class DbmlPreviewProvider {
             const vscode = acquireVsCodeApi();
             const svg = document.getElementById('diagram-svg');
             const container = document.querySelector('.diagram-container');
+            const gridOverlay = document.getElementById('canvasGrid');
+            const gridToggleBtn = document.getElementById('gridToggleBtn');
             const initialLayoutData = ${layoutJson};
             const documentPath = ${documentPathJson};
             const tableLookup = new Map();
@@ -1362,10 +1423,13 @@ export class DbmlPreviewProvider {
             
             let viewBox = { x: 0, y: 0, width: 2000, height: 2000 };
             const gridSize = 20;
+            const majorGridMultiple = 5;
+            const minGridPixelSize = 0.5;
             const layoutCanPersist = typeof documentPath === 'string' && documentPath.length > 0;
 			
             const state = vscode.getState() || {};
             let positions = {};
+            let gridVisible = typeof state.gridVisible === 'boolean' ? state.gridVisible : false;
             let diagramViews = Array.isArray(state.views)
                 ? JSON.parse(JSON.stringify(state.views))
                 : Array.isArray(initialLayoutData.views)
@@ -1391,12 +1455,55 @@ export class DbmlPreviewProvider {
             const savedViewBox = state.viewBox || initialLayoutData.viewBox;
             let layoutSaveTimeout = null;
 
+            updateGridVisibility();
+            updateGridAppearance();
+            window.addEventListener('resize', updateGridAppearance);
+            requestAnimationFrame(updateGridAppearance);
+
             function cloneViews() {
                 return diagramViews.map(view => ({
                     id: view.id,
                     name: view.name,
                     tables: Array.isArray(view.tables) ? [...view.tables] : []
                 }));
+            }
+
+            function updateGridVisibility() {
+                if (container) {
+                    container.classList.toggle('grid-visible', Boolean(gridVisible));
+                }
+                if (gridOverlay) {
+                    gridOverlay.setAttribute('aria-hidden', gridVisible ? 'false' : 'true');
+                }
+                if (gridToggleBtn) {
+                    gridToggleBtn.classList.toggle('active', Boolean(gridVisible));
+                }
+            }
+
+            function updateGridAppearance() {
+                if (!gridOverlay || !svg || !container) {
+                    return;
+                }
+                const width = svg.clientWidth;
+                const height = svg.clientHeight;
+                if (!width || !height || !viewBox.width || !viewBox.height) {
+                    return;
+                }
+                const scaleX = width / viewBox.width;
+                const scaleY = height / viewBox.height;
+                const cellWidth = Math.max(gridSize * scaleX, minGridPixelSize);
+                const cellHeight = Math.max(gridSize * scaleY, minGridPixelSize);
+                const majorWidth = cellWidth * majorGridMultiple;
+                const majorHeight = cellHeight * majorGridMultiple;
+                const offsetX = ((-viewBox.x * scaleX) % cellWidth + cellWidth) % cellWidth;
+                const offsetY = ((-viewBox.y * scaleY) % cellHeight + cellHeight) % cellHeight;
+
+                gridOverlay.style.setProperty('--grid-cell-width', cellWidth.toFixed(2) + 'px');
+                gridOverlay.style.setProperty('--grid-cell-height', cellHeight.toFixed(2) + 'px');
+                gridOverlay.style.setProperty('--grid-major-width', majorWidth.toFixed(2) + 'px');
+                gridOverlay.style.setProperty('--grid-major-height', majorHeight.toFixed(2) + 'px');
+                gridOverlay.style.setProperty('--grid-offset-x', offsetX.toFixed(2) + 'px');
+                gridOverlay.style.setProperty('--grid-offset-y', offsetY.toFixed(2) + 'px');
             }
 
             function refreshRelationshipVisibility() {
@@ -1706,6 +1813,7 @@ export class DbmlPreviewProvider {
                 state.viewBox = viewBox;
                 state.views = cloneViews();
                 state.activeViewId = activeViewId;
+                state.gridVisible = gridVisible;
                 vscode.setState(state);
             }
 			
@@ -2106,6 +2214,7 @@ export class DbmlPreviewProvider {
                     height: savedViewBox.height
                 };
                 svg.setAttribute('viewBox', viewBox.x + ' ' + viewBox.y + ' ' + viewBox.width + ' ' + viewBox.height);
+                updateGridAppearance();
             }
             
             // Apply saved positions
@@ -2174,6 +2283,7 @@ export class DbmlPreviewProvider {
                 viewBox.y = svgP.y - (svgP.y - viewBox.y) * delta;
                 
                 svg.setAttribute('viewBox', viewBox.x + ' ' + viewBox.y + ' ' + viewBox.width + ' ' + viewBox.height);
+                updateGridAppearance();
                 
                 // Save viewBox state
                 persistState();
@@ -2309,6 +2419,7 @@ export class DbmlPreviewProvider {
                     viewBox.y -= dy;
                     
                     svg.setAttribute('viewBox', viewBox.x + ' ' + viewBox.y + ' ' + viewBox.width + ' ' + viewBox.height);
+                    updateGridAppearance();
                     
                     panStart.x = e.clientX;
                     panStart.y = e.clientY;
@@ -2797,6 +2908,15 @@ export class DbmlPreviewProvider {
                     directoryToggleBtn.classList.toggle('active', isOpen);
                 });
             }
+
+            if (gridToggleBtn) {
+                gridToggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    gridVisible = !gridVisible;
+                    updateGridVisibility();
+                    persistState();
+                });
+            }
             
             // Close directory button
             if (closeDirectoryBtn && tableDirectory) {
@@ -2855,6 +2975,7 @@ export class DbmlPreviewProvider {
                 resetZoomBtn.addEventListener('click', () => {
                     viewBox = { x: 0, y: 0, width: 2000, height: 2000 };
                     svg.setAttribute('viewBox', '0 0 2000 2000');
+                    updateGridAppearance();
                     persistViewsAndScheduleSave();
                 });
             }
