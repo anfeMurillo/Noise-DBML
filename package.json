@@ -1,8 +1,9 @@
 {
-  "name": "dbml-diagram-viewer",
-  "displayName": "DBML Diagram Viewer",
-  "description": "Preview DBML relational database diagrams in VS Code",
+  "name": "noise-dbml",
+  "displayName": "NOISE DBML",
+  "description": "Visual editor preview for DBML relational diagrams",
   "version": "0.0.1",
+  "publisher": "AndrsFelipeMurillo",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -12,10 +13,11 @@
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
+  "icon": "media/extension-icon.svg",
   "contributes": {
     "commands": [
       {
-        "command": "dbml-diagram-viewer.openPreview",
+        "command": "noise-dbml.openPreview",
         "title": "Open DBML Preview",
         "icon": "$(preview)"
       }
@@ -24,7 +26,7 @@
       "editor/title": [
         {
           "when": "resourceLangId == dbml",
-          "command": "dbml-diagram-viewer.openPreview",
+          "command": "noise-dbml.openPreview",
           "group": "navigation"
         }
       ]

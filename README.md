@@ -1,112 +1,82 @@
-# DBML Diagram Viewer
+![NOISE DBML icon](media/extension-icon.svg)
 
-Una extensión de VS Code para previsualizar diagramas de bases de datos relacionales escritos en DBML (Database Markup Language).
+# NOISE DBML
 
-## Características
+NOISE DBML es una extensión de VS Code, publicada por **AndrsFelipeMurillo**, que te permite visualizar y manipular diagramas relacionales derivados de archivos DBML directamente en el editor.
 
-- 📝 **Sintaxis DBML**: Soporte completo para archivos `.dbml`
-- 👁️ **Vista previa**: Botón de ojo en la barra del editor para abrir la vista previa
-- 🎨 **Adaptación de tema**: Los colores del diagrama se adaptan automáticamente al tema de VS Code
-- 💾 **Actualización al guardar**: La vista previa se actualiza solo cuando guardas el archivo (Ctrl+S)
-- 🖱️ **Tablas movibles**: Arrastra y suelta las tablas para reorganizar el diagrama libremente
-- 🔗 **Etiquetas de cardinalidad**: Las relaciones muestran su tipo directamente:
-  - `1:1` = Uno a uno (one-to-one)
-  - `1:n` = Uno a muchos (one-to-many)
-  - `n:n` = Muchos a muchos (many-to-many)
-  - `0:1` = Cero o uno (optional relationship)
-- 🎨 **Líneas interactivas**: Estados de color dinámicos
-  - **Pasivo**: Color suave cuando no hay interacción
-  - **Activo**: Color vivo cuando pasas el mouse sobre una tabla relacionada
-- ∞ **Lienzo infinito**: Canvas sin límites con pan y zoom
-  - Arrastra el fondo para desplazarte por el canvas
-  - Usa la rueda del mouse para hacer zoom
-  - Las tablas se ajustan a una cuadrícula invisible
-  - **Posiciones persistentes**: Las ubicaciones se guardan automáticamente
-- 📐 **Líneas inteligentes**: Las relaciones siguen rutas ortogonales (solo ángulos de 0° y 90°) con esquinas redondeadas
+## Características clave
 
-## Uso
+- **Vista previa instantánea**: Abre un panel con el diagrama del archivo `.dbml` activo desde la barra del editor.
+- **Render adaptable al tema**: Colores, tipografías y estados de foco se adaptan automáticamente al tema de VS Code.
+- **Lienzo infinito con cuadrícula precisa**: Navega con pan y zoom, muestra una malla ajustable que respeta el nivel de zoom y alinea las tablas a un grid magnético.
+- **Posiciones persistentes**: El estado del diagrama (posiciones, vista, zoom y cuadrícula) se guarda por archivo para mantener tu layout personalizado.
+- **Grupos y vistas personalizadas**: Define grupos en DBML, alterna colapsado y crea conjuntos de tablas visibles mediante vistas guardadas.
+- **Auto-organización flexible**: Tres algoritmos (Left-right, Snowflake, Compact) para reorganizar el diagrama según tu caso de uso.
+- **Relaciones inteligentes**: Conexiones ortogonales, resaltado contextual y marcadores de cardinalidad (`1`, `0..1`, `*`).
 
-1. Abre o crea un archivo con extensión `.dbml`
-2. Escribe tu esquema de base de datos en sintaxis DBML
-3. Haz clic en el icono de ojo (👁️) en la esquina superior derecha del editor
-4. La vista previa del diagrama aparecerá en un panel lateral
+## Primeros pasos
 
-### Controles del diagrama
+1. Instala la extensión NOISE DBML desde el Marketplace usando el identificador `AndrsFelipeMurillo.noise-dbml`.
+2. Abre un archivo `.dbml` o crea uno nuevo.
+3. Selecciona el botón con el ícono de ojo en la barra superior del editor o ejecuta el comando **DBML: Open Preview**.
+4. Usa el panel lateral para explorar tablas, grupos y vistas guardadas.
 
-- **Mover tablas**: Haz clic y arrastra una tabla a una nueva posición
-- **Pan (desplazar)**: Haz clic y arrastra el fondo del canvas
-- **Zoom**: Usa la rueda del mouse para acercar/alejar
-- **Ver relaciones**: Pasa el mouse sobre una tabla para resaltar sus conexiones
-- **Auto-guardado**: Las posiciones y el zoom se guardan automáticamente y persisten entre sesiones
+> Consejo: el archivo `example.dbml` incluido en el repositorio sirve como punto de partida rápido.
 
-## Ejemplo de sintaxis DBML
+## Controles del diagrama
+
+- **Pan**: arrastra el lienzo en un área vacía.
+- **Zoom**: rueda del mouse (el punto de zoom sigue al cursor).
+- **Mover tablas**: arrastra una tabla; se alineará automáticamente a la cuadrícula.
+- **Arrastrar grupos**: arrastra la cabecera del grupo para mover todas las tablas asociadas.
+- **Cuadrícula**: alterna la visibilidad con el botón dedicado; la malla se ajusta al nivel de zoom.
+- **Resaltado de relaciones**: al pasar el cursor sobre una tabla se resaltan sus relaciones activas.
+
+## Funcionalidades adicionales
+
+- **Auto Arrange**: abre el panel lateral y elige el algoritmo deseado para reorganizar el diagrama.
+- **Diagram Views**: crea vistas con subconjuntos de tablas, renómbralas, elimínalas o restablece la vista completa.
+- **Persistencia de layout**: se guarda un archivo `.layout.json` junto al `.dbml` con posiciones, vista y configuraciones.
+
+## Ejemplo de DBML
 
 ```dbml
 Table users {
-  id integer [primary key]
+  id int [pk]
   username varchar(50) [not null, unique]
-  email varchar(100) [not null, unique]
+  email varchar(120) [not null, unique]
   created_at timestamp [default: `now()`]
 }
 
-Table posts {
-  id integer [primary key]
-  user_id integer [not null, ref: > users.id]
-  title varchar(255) [not null]
-  content text
-  published boolean [default: false]
+Table orders {
+  id int [pk]
+  user_id int [not null, ref: > users.id]
+  total numeric(10,2) [not null]
+  status varchar(20)
+  created_at timestamp
 }
 
-Ref: posts.user_id > users.id [delete: cascade]
+Ref: orders.user_id > users.id [delete: cascade]
 ```
 
-## Desarrollo
+## Requisitos
 
-Para ejecutar esta extensión en modo desarrollo:
+- Visual Studio Code 1.107.0 o superior.
+- Archivos `.dbml` escritos con la sintaxis oficial de [DBML](https://www.dbml.org/home/).
 
-1. Presiona `F5` para abrir una nueva ventana de VS Code con la extensión cargada
-2. Abre el archivo `example.dbml` incluido para probar la funcionalidad
-3. Haz clic en el icono de ojo en la esquina superior derecha
+## Comandos disponibles
 
-## Comandos
+- **DBML: Open Preview** (`noise-dbml.openPreview`): abre o enfoca la vista previa del diagrama para el documento activo.
 
-- `DBML: Open Preview` - Abre la vista previa del diagrama DBML
+## Desarrollo y pruebas
 
-## Release Notes
+1. Clona el repositorio y ejecuta `npm install`.
+2. Usa `npm run compile` para construir la extensión.
+3. Presiona `F5` en VS Code para abrir una ventana de desarrollo con NOISE DBML cargada.
+4. Ejecuta `npm test` para correr los tests automatizados.
 
-### 0.0.1
+> Scripts útiles: `npm run watch` (compilación incremental), `npm run lint` (estilo) y `npm run package` (build optimizada).
 
-Versión inicial:
-- Soporte básico para archivos DBML con syntax highlighting
-- Vista previa de diagramas con adaptación automática al tema de VS Code
-- Actualización al guardar (sin errores mientras escribes)
-- Tablas arrastrables con posiciones persistentes entre sesiones
-- Etiquetas de cardinalidad (1:1, 1:n, n:n) en lugar de flechas
-- Líneas con estados: pasivo (suave) y activo (resaltado al hover)
-- Canvas infinito con pan y zoom
-- Líneas ortogonales inteligentes con esquinas redondeadas
-- Alineación automática a cuadrícula invisible
-- Relaciones dinámicas que se actualizan en tiempo real
+## Soporte
 
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Reporta issues o solicita nuevas funciones en el repositorio oficial. ¡Disfruta diagramando con NOISE DBML!

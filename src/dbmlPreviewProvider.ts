@@ -40,7 +40,7 @@ export class DbmlPreviewProvider {
 
 	constructor(private readonly extensionUri: vscode.Uri) {}
 
-	public showPreview(document: vscode.TextDocument) {
+    public async showPreview(document: vscode.TextDocument): Promise<void> {
 		this.currentDocument = document;
 
 		if (this.panel) {
@@ -104,32 +104,45 @@ export class DbmlPreviewProvider {
 			});
 		}
 
-		// Update the webview content
-        void this.updatePreview(document);
-	}
+        await this.renderDocument(document);
+        if (!this.panel) {
+            return;
+        }
 
-    public async updatePreview(document: vscode.TextDocument) {
-		if (!this.panel || document !== this.currentDocument) {
-			return;
-		}
+        await this.renderDocument(document);
+    }
 
-    	const dbmlContent = document.getText();
-        const isFileDocument = document.uri.scheme === 'file';
-        const documentPath = isFileDocument ? document.uri.fsPath : '';
+    private async renderDocument(document: vscode.TextDocument): Promise<void> {
+        if (!this.panel) {
+            return;
+        }
+
+        const documentPath = document.uri.fsPath;
+        const dbmlContent = document.getText();
         let layoutData: LayoutData = {};
-
-        if (isFileDocument) {
-            try {
-                layoutData = await this.loadLayout(documentPath);
-            } catch (error) {
-                console.error('Failed to load DBML layout data:', error);
-            }
+        try {
+            layoutData = await this.loadLayout(documentPath);
+        } catch (error) {
+            console.error('Failed to load DBML layout data:', error);
+            layoutData = {};
         }
 
         const { sanitized, groups } = this.preprocessDbmlContent(dbmlContent);
-
         this.panel.webview.html = this.getWebviewContent(sanitized, layoutData, documentPath, groups);
-	}
+    }
+
+    public async updatePreview(document: vscode.TextDocument): Promise<void> {
+        if (!this.panel) {
+            return;
+        }
+
+        if (!this.currentDocument || this.currentDocument.uri.fsPath !== document.uri.fsPath) {
+            return;
+        }
+
+        this.currentDocument = document;
+        await this.renderDocument(document);
+    }
 
     private getLayoutFilePathFromFsPath(documentPath: string): string {
         const directory = path.dirname(documentPath);
@@ -1182,15 +1195,26 @@ export class DbmlPreviewProvider {
             gap: 8px;
             padding: 6px 8px;
             border-radius: 4px;
+            transition: background 0.2s ease, color 0.2s ease;
         }
 
         .diagram-views-table-item:hover {
             background: var(--vscode-toolbar-hoverBackground);
         }
 
+        .diagram-views-table-item.selected {
+            background: var(--vscode-list-activeSelectionBackground);
+            color: var(--vscode-list-activeSelectionForeground);
+        }
+
+        .diagram-views-table-item.selected:hover {
+            background: var(--vscode-list-activeSelectionBackground);
+        }
+
         .diagram-views-table-item input[type="checkbox"] {
             width: 14px;
             height: 14px;
+            accent-color: var(--vscode-checkbox-foreground, var(--vscode-list-activeSelectionBackground));
         }
 
         .diagram-views-empty {
@@ -1213,6 +1237,61 @@ export class DbmlPreviewProvider {
             font-size: 11px;
             opacity: 0.7;
             line-height: 1.4;
+        }
+
+        .diagram-views-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            backdrop-filter: blur(1px);
+        }
+
+        .diagram-views-modal-backdrop.open {
+            display: flex;
+        }
+
+        .diagram-views-modal {
+            background: var(--vscode-editorWidget-background);
+            color: var(--vscode-foreground);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 8px;
+            padding: 16px;
+            width: min(320px, 90vw);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .diagram-views-modal-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .diagram-views-modal-description {
+            font-size: 12px;
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+
+        .diagram-views-modal-input {
+            height: 28px;
+            border-radius: 4px;
+            border: 1px solid var(--vscode-input-border);
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .diagram-views-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
         }
     </style>
 </head>
@@ -1310,6 +1389,17 @@ export class DbmlPreviewProvider {
                         <button class="diagram-views-button primary" id="diagramViewsSaveBtn" title="Save current view">Save</button>
                     </div>
                     <div class="diagram-views-hint">Select which tables belong to the active view. Use Show all to reset the diagram.</div>
+                </div>
+            </div>
+            <div class="diagram-views-modal-backdrop" id="diagramViewsModal" aria-hidden="true">
+                <div class="diagram-views-modal" role="dialog" aria-modal="true" aria-labelledby="diagramViewsModalTitle">
+                    <div class="diagram-views-modal-title" id="diagramViewsModalTitle">Nueva vista</div>
+                    <div class="diagram-views-modal-description">&#191;C&#243;mo quieres llamar la nueva vista?</div>
+                    <input class="diagram-views-modal-input" id="diagramViewsModalInput" type="text" autocomplete="off" spellcheck="false" />
+                    <div class="diagram-views-modal-actions">
+                        <button class="diagram-views-button" id="diagramViewsModalCancel">Cancelar</button>
+                        <button class="diagram-views-button primary" id="diagramViewsModalConfirm">Guardar</button>
+                    </div>
                 </div>
             </div>
             <div class="toolbar">
@@ -1447,6 +1537,7 @@ export class DbmlPreviewProvider {
                 activeViewId = '';
             }
             let pendingViewTables = new Set();
+            let dismissNewViewModal = null;
             if (state.positions && typeof state.positions === 'object') {
                 positions = JSON.parse(JSON.stringify(state.positions));
             } else if (initialLayoutData.positions && typeof initialLayoutData.positions === 'object') {
@@ -1466,6 +1557,102 @@ export class DbmlPreviewProvider {
                     name: view.name,
                     tables: Array.isArray(view.tables) ? [...view.tables] : []
                 }));
+            }
+
+            function generateUniqueViewName(baseName) {
+                const sanitized = typeof baseName === 'string' && baseName.trim().length > 0
+                    ? baseName.trim()
+                    : 'Nueva vista';
+                const existingNames = new Set(
+                    diagramViews
+                        .filter(view => view && typeof view.name === 'string')
+                        .map(view => view.name.trim().toLowerCase())
+                );
+                if (!existingNames.has(sanitized.toLowerCase())) {
+                    return sanitized;
+                }
+                let index = 2;
+                let candidate = sanitized + ' ' + index;
+                while (existingNames.has(candidate.toLowerCase())) {
+                    index += 1;
+                    candidate = sanitized + ' ' + index;
+                }
+                return candidate;
+            }
+
+            function requestNewViewName(defaultName, onConfirm) {
+                if (typeof onConfirm !== 'function') {
+                    return;
+                }
+                const fallbackDefault = typeof defaultName === 'string' && defaultName.trim().length > 0
+                    ? defaultName.trim()
+                    : 'Nueva vista';
+
+                if (!diagramViewsModal || !diagramViewsModalInput || !diagramViewsModalConfirm || !diagramViewsModalCancel) {
+                    const fallbackResponse = prompt('\u00bfC\u00f3mo quieres llamar la nueva vista?', fallbackDefault);
+                    if (fallbackResponse && fallbackResponse.trim()) {
+                        onConfirm(fallbackResponse.trim());
+                    }
+                    return;
+                }
+
+                if (typeof dismissNewViewModal === 'function') {
+                    dismissNewViewModal();
+                }
+
+                diagramViewsModal.classList.add('open');
+                diagramViewsModal.setAttribute('aria-hidden', 'false');
+                diagramViewsModalInput.value = fallbackDefault;
+                diagramViewsModalInput.focus();
+                diagramViewsModalInput.select();
+
+                const cleanup = () => {
+                    diagramViewsModal.classList.remove('open');
+                    diagramViewsModal.setAttribute('aria-hidden', 'true');
+                    diagramViewsModalConfirm.removeEventListener('click', confirmHandler);
+                    diagramViewsModalCancel.removeEventListener('click', cancelHandler);
+                    diagramViewsModal.removeEventListener('pointerdown', backdropHandler);
+                    diagramViewsModalInput.removeEventListener('keydown', keyHandler);
+                    dismissNewViewModal = null;
+                };
+
+                const confirmHandler = (event) => {
+                    event.preventDefault();
+                    const value = diagramViewsModalInput.value.trim();
+                    if (!value) {
+                        diagramViewsModalInput.focus();
+                        return;
+                    }
+                    cleanup();
+                    onConfirm(value);
+                };
+
+                const cancelHandler = (event) => {
+                    event.preventDefault();
+                    cleanup();
+                };
+
+                const backdropHandler = (event) => {
+                    if (event.target === diagramViewsModal) {
+                        cleanup();
+                    }
+                };
+
+                const keyHandler = (event) => {
+                    if (event.key === 'Enter') {
+                        confirmHandler(event);
+                    } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        cancelHandler(event);
+                    }
+                };
+
+                diagramViewsModalConfirm.addEventListener('click', confirmHandler);
+                diagramViewsModalCancel.addEventListener('click', cancelHandler);
+                diagramViewsModal.addEventListener('pointerdown', backdropHandler);
+                diagramViewsModalInput.addEventListener('keydown', keyHandler);
+
+                dismissNewViewModal = cleanup;
             }
 
             function updateGridVisibility() {
@@ -2816,6 +3003,7 @@ export class DbmlPreviewProvider {
                         } else {
                             pendingViewTables.delete(tableName);
                         }
+                        item.classList.toggle('selected', checkbox.checked);
                         if (typeof onToggle === 'function') {
                             onToggle();
                         }
@@ -2824,6 +3012,7 @@ export class DbmlPreviewProvider {
                     const label = document.createElement('span');
                     label.textContent = tableName;
 
+                    item.classList.toggle('selected', checkbox.checked);
                     item.appendChild(checkbox);
                     item.appendChild(label);
                     container.appendChild(item);
@@ -2894,6 +3083,10 @@ export class DbmlPreviewProvider {
             const diagramViewsTableList = document.getElementById('diagramViewsTableList');
             const diagramViewsShowAllBtn = document.getElementById('diagramViewsShowAllBtn');
             const diagramViewsSaveBtn = document.getElementById('diagramViewsSaveBtn');
+            const diagramViewsModal = document.getElementById('diagramViewsModal');
+            const diagramViewsModalInput = document.getElementById('diagramViewsModalInput');
+            const diagramViewsModalConfirm = document.getElementById('diagramViewsModalConfirm');
+            const diagramViewsModalCancel = document.getElementById('diagramViewsModalCancel');
             
             // Initialize table directory
             initializeTableDirectory();
@@ -3005,6 +3198,9 @@ export class DbmlPreviewProvider {
                 const hidePanel = () => {
                     diagramViewsPanel.classList.remove('open');
                     diagramViewsToggleBtn.classList.remove('active');
+                    if (typeof dismissNewViewModal === 'function') {
+                        dismissNewViewModal();
+                    }
                 };
 
                 diagramViewsToggleBtn.addEventListener('click', (event) => {
@@ -3023,8 +3219,8 @@ export class DbmlPreviewProvider {
                     });
                 }
 
-                document.addEventListener('click', (event) => {
-                    if (!diagramViewsPanel.contains(event.target) && !diagramViewsToggleBtn.contains(event.target)) {
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' && !event.defaultPrevented && diagramViewsPanel.classList.contains('open')) {
                         hidePanel();
                     }
                 });
@@ -3055,24 +3251,24 @@ export class DbmlPreviewProvider {
 
                 if (diagramViewsNewBtn) {
                     diagramViewsNewBtn.addEventListener('click', () => {
-                        const name = prompt('Name for the new view', 'New View');
-                        if (!name || !name.trim()) {
-                            return;
-                        }
+                        const defaultName = generateUniqueViewName('Nueva vista');
+                        requestNewViewName(defaultName, (resolvedName) => {
+                            const id = 'view_' + Date.now().toString(36);
+                            const tables = pendingViewTables.size > 0
+                                ? Array.from(pendingViewTables)
+                                : Array.from(allTableNames);
 
-                        const id = 'view_' + Date.now().toString(36);
-                        const tables = Array.from(pendingViewTables.size > 0 ? pendingViewTables : new Set(allTableNames));
-
-                        diagramViews.push({
-                            id,
-                            name: name.trim(),
-                            tables
+                            diagramViews.push({
+                                id,
+                                name: resolvedName,
+                                tables
+                            });
+                            activeViewId = id;
+                            pendingViewTables = new Set(tables);
+                            applyViewTables(tables);
+                            persistViewsAndScheduleSave();
+                            refreshUi();
                         });
-                        activeViewId = id;
-                        pendingViewTables = new Set(tables);
-                        applyViewTables(tables);
-                        persistViewsAndScheduleSave();
-                        refreshUi();
                     });
                 }
 

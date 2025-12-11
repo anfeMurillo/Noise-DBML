@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const provider = new DbmlPreviewProvider(context.extensionUri);
 
 	// Register the command to open preview
-	const disposable = vscode.commands.registerCommand('dbml-diagram-viewer.openPreview', () => {
+	const disposable = vscode.commands.registerCommand('noise-dbml.openPreview', () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			vscode.window.showErrorMessage('No active editor found');
