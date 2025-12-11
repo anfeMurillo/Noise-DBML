@@ -1702,11 +1702,13 @@ export class DbmlPreviewProvider {
             noteTooltip.className = 'note-tooltip';
             document.body.appendChild(noteTooltip);
             
+            let showTooltipTimeout;
             let hideTooltipTimeout;
             
             document.querySelectorAll('.field-row.has-note').forEach(fieldRow => {
-                fieldRow.addEventListener('mouseenter', function(e) {
+                fieldRow.addEventListener('mouseenter', function() {
                     clearTimeout(hideTooltipTimeout);
+                    clearTimeout(showTooltipTimeout);
                     const note = this.getAttribute('data-note');
                     if (note) {
                         noteTooltip.textContent = note;
@@ -1723,13 +1725,14 @@ export class DbmlPreviewProvider {
                         noteTooltip.style.transform = 'translateY(-50%)';
                         
                         // Show tooltip after a short delay
-                        setTimeout(() => {
+                        showTooltipTimeout = setTimeout(() => {
                             noteTooltip.classList.add('visible');
                         }, 200);
                     }
                 });
                 
                 fieldRow.addEventListener('mouseleave', function() {
+                    clearTimeout(showTooltipTimeout);
                     hideTooltipTimeout = setTimeout(() => {
                         noteTooltip.classList.remove('visible');
                     }, 100);
