@@ -245,6 +245,26 @@ export class DbmlPreviewProvider {
             filter: brightness(1.1);
         }
         
+        svg .draggable.selected .table {
+            filter: brightness(1.08) drop-shadow(0 0 3px var(--vscode-button-background));
+        }
+        
+        svg .draggable.selected .table-border {
+            stroke: var(--vscode-button-background);
+            stroke-width: 2.2;
+            filter: drop-shadow(0 0 2px var(--vscode-button-background));
+            animation: pulse-border 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-border {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+        
         .error {
             color: var(--vscode-errorForeground);
             background-color: var(--vscode-inputValidation-errorBackground);
@@ -267,6 +287,144 @@ export class DbmlPreviewProvider {
             opacity: 0.7;
         }
         
+        /* Note tooltip */
+        .note-tooltip {
+            position: fixed;
+            background: var(--vscode-editorWidget-background);
+            border: 1px solid var(--vscode-editorWidget-border);
+            border-radius: 6px;
+            padding: 12px 16px;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--vscode-editorWidget-foreground);
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        
+        .note-tooltip.visible {
+            opacity: 1;
+        }
+        
+        .note-tooltip::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 6px 8px 6px 0;
+            border-color: transparent var(--vscode-editorWidget-border) transparent transparent;
+        }
+        
+        .note-tooltip::after {
+            content: '';
+            position: absolute;
+            left: -7px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 5px 7px 5px 0;
+            border-color: transparent var(--vscode-editorWidget-background) transparent transparent;
+        }
+        
+        svg .note-icon:hover {
+            opacity: 1 !important;
+        }
+        
+        /* Table directory panel */
+        .table-directory {
+            position: fixed;
+            right: -280px;
+            top: 0;
+            width: 280px;
+            height: 100%;
+            background: var(--vscode-sideBar-background);
+            border-left: 1px solid var(--vscode-panel-border);
+            transition: right 0.3s ease;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .table-directory.open {
+            right: 0;
+        }
+        
+        .table-directory-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .table-directory-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--vscode-foreground);
+        }
+        
+        .table-directory-close {
+            background: none;
+            border: none;
+            color: var(--vscode-icon-foreground);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
+        
+        .table-directory-close:hover {
+            background: var(--vscode-toolbar-hoverBackground);
+        }
+        
+        .table-directory-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        
+        .table-directory-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--vscode-foreground);
+            margin-bottom: 2px;
+        }
+        
+        .table-directory-item:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        
+        .table-directory-item.selected {
+            background: var(--vscode-list-activeSelectionBackground);
+            color: var(--vscode-list-activeSelectionForeground);
+        }
+        
+        .table-directory-item svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+        
         /* Toolbar */
         .toolbar {
             position: fixed;
@@ -278,7 +436,8 @@ export class DbmlPreviewProvider {
             z-index: 1000;
         }
         
-        .toolbar-button {
+        .toolbar-button,
+        .toolbar-button.directory-toggle {
             width: 40px;
             height: 40px;
             background: var(--vscode-sideBar-background);
@@ -303,8 +462,8 @@ export class DbmlPreviewProvider {
         }
         
         .toolbar-button svg {
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             fill: currentColor;
             color: var(--vscode-icon-foreground);
             opacity: 0.9;
@@ -312,7 +471,8 @@ export class DbmlPreviewProvider {
         
         .toolbar-button:hover svg {
             opacity: 1;
-            color: var(--vscode-button-foreground);
+            color: var(--vscode-editor-background);
+            filter: brightness(2) contrast(1.5);
         }
         
         .toolbar-button.active svg {
@@ -424,6 +584,18 @@ export class DbmlPreviewProvider {
                 <pre>${errorMessage}</pre>
             </div>
         ` : `
+            <div class="table-directory" id="tableDirectory">
+                <div class="table-directory-header">
+                    <div class="table-directory-title">Tables</div>
+                    <button class="table-directory-close" id="closeDirectoryBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                            <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="table-directory-content" id="tableDirectoryContent">
+                </div>
+            </div>
             <div class="diagram-container">
                 ${svgContent}
             </div>
@@ -473,15 +645,19 @@ export class DbmlPreviewProvider {
                 </div>
             </div>
             <div class="toolbar">
+                <button class="toolbar-button directory-toggle" id="directoryToggleBtn" title="Toggle table directory">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                        <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/>
+                    </svg>
+                </button>
                 <button class="toolbar-button" id="autoArrangeBtn" title="Auto arrange diagram">
-                    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                        <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Z"/>
-                        <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM5 13s1-1 3-1 3 1 3 1v1H5v-1Z"/>
+                    <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                        <path d="M42.56,26.854c0.391-0.391,0.391-1.023,0-1.414l-4.685-4.686c-0.188-0.188-0.442-0.293-0.707-0.293s-0.52,0.105-0.707,0.293l-9.979,9.979c-0.799,0.775-1.823,1.202-2.883,1.202c-0.937,0-1.801-0.348-2.432-0.979c-1.387-1.387-1.281-3.776,0.231-5.323c0.076-0.076,3.404-3.405,6.2-6.201c0,0,0,0,0,0s0,0,0,0c1.902-1.902,3.56-3.56,3.769-3.769c0.391-0.391,0.391-1.023,0-1.414l-4.685-4.686c-0.188-0.188-0.442-0.293-0.708-0.293c0,0,0,0-0.001,0c-0.266,0.001-0.521,0.107-0.708,0.295c-0.042,0.043-1.747,1.748-3.767,3.768l0,0l0,0c-0.038,0.038-0.075,0.075-0.113,0.113c-2.974,2.974-6.57,6.57-6.589,6.59C9.785,25.162,9.54,33.164,14.25,37.874c2.19,2.19,5.162,3.396,8.368,3.396c3.484,0,6.833-1.387,9.425-3.901C32.104,37.311,42.455,26.959,42.56,26.854z M25.976,11.685l3.271,3.271c-0.873,0.873-1.639,1.639-2.356,2.355l-3.271-3.271C24.577,13.084,25.419,12.242,25.976,11.685z M30.654,35.93c-2.221,2.154-5.075,3.341-8.036,3.341c-2.672,0-5.142-0.998-6.954-2.811c-3.938-3.938-3.686-10.679,0.56-15.021c0.072-0.072,3.176-3.176,5.983-5.984l3.271,3.271c-5.475,5.475-5.504,5.505-5.505,5.506c-2.279,2.33-2.377,5.981-0.22,8.14c1.009,1.009,2.375,1.564,3.846,1.564c1.582,0,3.101-0.627,4.286-1.777l5.505-5.505l3.271,3.271C33.85,32.735,30.743,35.842,30.654,35.93z M38.075,28.511l-3.271-3.271l2.364-2.364l3.271,3.271C39.881,26.705,39.035,27.55,38.075,28.511z"/>
                     </svg>
                 </button>
                 <button class="toolbar-button" id="resetZoomBtn" title="Reset zoom and pan">
-                    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                    <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                        <path d="M20.921,31.898c2.758,0,5.367-0.956,7.458-2.704l1.077,1.077l-0.358,0.358c-0.188,0.188-0.293,0.442-0.293,0.707s0.105,0.52,0.293,0.707l8.257,8.256c0.195,0.195,0.451,0.293,0.707,0.293s0.512-0.098,0.707-0.293l2.208-2.208c0.188-0.188,0.293-0.442,0.293-0.707s-0.105-0.52-0.293-0.707l-8.257-8.256c-0.391-0.391-1.023-0.391-1.414,0l-0.436,0.436l-1.073-1.073c1.793-2.104,2.777-4.743,2.777-7.537c0-3.112-1.212-6.038-3.413-8.239s-5.127-3.413-8.239-3.413s-6.038,1.212-8.238,3.413c-2.201,2.201-3.413,5.126-3.413,8.239c0,3.112,1.212,6.038,3.413,8.238C14.883,30.687,17.809,31.898,20.921,31.898z M38.855,37.385l-0.794,0.793l-6.843-6.842l0.794-0.793L38.855,37.385z M14.097,13.423c1.823-1.823,4.246-2.827,6.824-2.827s5.002,1.004,6.825,2.827c1.823,1.823,2.827,4.247,2.827,6.825c0,2.578-1.004,5.001-2.827,6.824c-1.823,1.823-4.247,2.827-6.825,2.827s-5.001-1.004-6.824-2.827c-1.823-1.823-2.827-4.247-2.827-6.824C11.27,17.669,12.273,15.246,14.097,13.423z"/>
                     </svg>
                 </button>
             </div>
@@ -493,6 +669,14 @@ export class DbmlPreviewProvider {
             const vscode = acquireVsCodeApi();
             const svg = document.getElementById('diagram-svg');
             const container = document.querySelector('.diagram-container');
+            const tableLookup = new Map();
+            document.querySelectorAll('.draggable').forEach(table => {
+                const name = table.getAttribute('data-table');
+                if (name) {
+                    tableLookup.set(name, table);
+                }
+            });
+            const directoryLookup = new Map();
             
             let selectedTable = null;
             let offset = { x: 0, y: 0 };
@@ -569,7 +753,10 @@ export class DbmlPreviewProvider {
             
             // Auto arrange algorithms
             function applyAutoArrange(algorithm) {
-                const tables = Array.from(document.querySelectorAll('.draggable'));
+                const tables = Array.from(tableLookup.values());
+                if (tables.length === 0) {
+                    return;
+                }
                 const tableWidth = 250;
                 const fieldHeight = 30;
                 const headerHeight = 40;
@@ -587,6 +774,9 @@ export class DbmlPreviewProvider {
                     
                     tables.forEach(table => {
                         const name = table.getAttribute('data-table');
+                        if (!name) {
+                            return;
+                        }
                         graph.set(name, []);
                         inDegree.set(name, 0);
                     });
@@ -594,7 +784,7 @@ export class DbmlPreviewProvider {
                     document.querySelectorAll('.relationship-line').forEach(line => {
                         const from = line.getAttribute('data-from');
                         const to = line.getAttribute('data-to');
-                        if (from && to) {
+                        if (from && to && graph.has(from) && inDegree.has(to)) {
                             graph.get(from).push(to);
                             inDegree.set(to, inDegree.get(to) + 1);
                         }
@@ -616,7 +806,11 @@ export class DbmlPreviewProvider {
                         
                         currentLayer.forEach(name => {
                             processed.add(name);
-                            graph.get(name).forEach(neighbor => {
+                            const neighbors = graph.get(name) || [];
+                            neighbors.forEach(neighbor => {
+                                if (!inDegree.has(neighbor)) {
+                                    return;
+                                }
                                 inDegree.set(neighbor, inDegree.get(neighbor) - 1);
                                 if (inDegree.get(neighbor) === 0 && !processed.has(neighbor)) {
                                     queue.push(neighbor);
@@ -632,7 +826,7 @@ export class DbmlPreviewProvider {
                     layers.forEach((layer, layerIndex) => {
                         let y = 100;
                         layer.forEach((tableName, index) => {
-                            const table = document.querySelector('[data-table="' + tableName + '"]');
+                            const table = tableLookup.get(tableName);
                             if (table) {
                                 const height = getTableHeight(table);
                                 tablePositions.push({ 
@@ -656,27 +850,36 @@ export class DbmlPreviewProvider {
                         pos.table.setAttribute('transform', 'translate(' + pos.x + ', ' + pos.y + ')');
                         pos.table.setAttribute('data-x', pos.x);
                         pos.table.setAttribute('data-y', pos.y);
-                        positions[pos.tableName] = { x: pos.x, y: pos.y };
+                        if (pos.tableName) {
+                            positions[pos.tableName] = { x: pos.x, y: pos.y };
+                        }
                     });
                     
                 } else if (algorithm === 'snowflake') {
                     // Calculate connection count for each table
                     const connections = new Map();
                     tables.forEach(table => {
-                        connections.set(table.getAttribute('data-table'), 0);
+                        const name = table.getAttribute('data-table');
+                        if (name) {
+                            connections.set(name, 0);
+                        }
                     });
                     
                     document.querySelectorAll('.relationship-line').forEach(line => {
                         const from = line.getAttribute('data-from');
                         const to = line.getAttribute('data-to');
-                        connections.set(from, connections.get(from) + 1);
-                        connections.set(to, connections.get(to) + 1);
+                        if (from && connections.has(from)) {
+                            connections.set(from, connections.get(from) + 1);
+                        }
+                        if (to && connections.has(to)) {
+                            connections.set(to, connections.get(to) + 1);
+                        }
                     });
                     
                     // Sort by connection count
                     const sortedTables = tables.sort((a, b) => {
-                        const aConn = connections.get(a.getAttribute('data-table'));
-                        const bConn = connections.get(b.getAttribute('data-table'));
+                        const aConn = connections.get(a.getAttribute('data-table')) || 0;
+                        const bConn = connections.get(b.getAttribute('data-table')) || 0;
                         return bConn - aConn;
                     });
                     
@@ -725,7 +928,9 @@ export class DbmlPreviewProvider {
                             pos.table.setAttribute('transform', 'translate(' + pos.x + ', ' + pos.y + ')');
                             pos.table.setAttribute('data-x', pos.x);
                             pos.table.setAttribute('data-y', pos.y);
-                            positions[pos.tableName] = { x: pos.x, y: pos.y };
+                            if (pos.tableName) {
+                                positions[pos.tableName] = { x: pos.x, y: pos.y };
+                            }
                         });
                     }
                     
@@ -769,7 +974,9 @@ export class DbmlPreviewProvider {
                         pos.table.setAttribute('transform', 'translate(' + pos.x + ', ' + pos.y + ')');
                         pos.table.setAttribute('data-x', pos.x);
                         pos.table.setAttribute('data-y', pos.y);
-                        positions[pos.tableName] = { x: pos.x, y: pos.y };
+                        if (pos.tableName) {
+                            positions[pos.tableName] = { x: pos.x, y: pos.y };
+                        }
                     });
                 }
                 
@@ -861,7 +1068,24 @@ export class DbmlPreviewProvider {
                 const target = e.target;
                 const tableGroup = target.closest('.draggable');
                 
+                // Check if click is outside any table (deselect)
+                if (!tableGroup && !target.closest('.table-directory') && !target.closest('.toolbar')) {
+                    // Deselect all tables
+                    document.querySelectorAll('.draggable.selected').forEach(t => {
+                        t.classList.remove('selected');
+                    });
+                    document.querySelectorAll('.table-directory-item.selected').forEach(item => {
+                        item.classList.remove('selected');
+                    });
+                }
+                
                 if (tableGroup) {
+                    // Select the table when clicking on it
+                    const tableName = tableGroup.getAttribute('data-table');
+                    if (tableName) {
+                        selectTable(tableName);
+                    }
+                    
                     // Dragging a table
                     isDragging = true;
                     selectedTable = tableGroup;
@@ -907,6 +1131,7 @@ export class DbmlPreviewProvider {
                     selectedTable.setAttribute('data-x', newX);
                     selectedTable.setAttribute('data-y', newY);
                     
+                    // Force update relationships immediately during dragging
                     updateRelationships();
                     e.preventDefault();
                 } else if (isPanning) {
@@ -934,8 +1159,10 @@ export class DbmlPreviewProvider {
                     const x = parseFloat(selectedTable.getAttribute('data-x'));
                     const y = parseFloat(selectedTable.getAttribute('data-y'));
                     
-                    positions[tableName] = { x, y };
-                    state.positions = positions;
+                    if (tableName) {
+                        positions[tableName] = { x, y };
+                        state.positions = positions;
+                    }
                     state.viewBox = viewBox;
                     vscode.setState(state);
                     
@@ -1082,14 +1309,19 @@ export class DbmlPreviewProvider {
                     const fromTableName = line.getAttribute('data-from');
                     const toTableName = line.getAttribute('data-to');
                     
-                    const fromTable = document.querySelector('[data-table="' + fromTableName + '"]');
-                    const toTable = document.querySelector('[data-table="' + toTableName + '"]');
+                    const fromTable = fromTableName ? tableLookup.get(fromTableName) : null;
+                    const toTable = toTableName ? tableLookup.get(toTableName) : null;
                     
                     if (fromTable && toTable) {
-                        const fromTableX = parseFloat(fromTable.getAttribute('data-x'));
-                        const fromTableY = parseFloat(fromTable.getAttribute('data-y'));
-                        const toTableX = parseFloat(toTable.getAttribute('data-x'));
-                        const toTableY = parseFloat(toTable.getAttribute('data-y'));
+                        const fromTableX = parseFloat(fromTable.getAttribute('data-x')) || 0;
+                        const fromTableY = parseFloat(fromTable.getAttribute('data-y')) || 0;
+                        const toTableX = parseFloat(toTable.getAttribute('data-x')) || 0;
+                        const toTableY = parseFloat(toTable.getAttribute('data-y')) || 0;
+                        
+                        // Skip if any coordinate is invalid
+                        if (isNaN(fromTableX) || isNaN(fromTableY) || isNaN(toTableX) || isNaN(toTableY)) {
+                            return;
+                        }
                         
                         // Get stored field offsets from data attributes
                         const fromFieldOffset = parseFloat(line.getAttribute('data-from-field-offset') || '0');
@@ -1127,9 +1359,11 @@ export class DbmlPreviewProvider {
                             toStubX = toX - stubLength;
                         }
                         
-                        // Get table heights
-                        const fromTableHeight = fromTable.getBBox().height;
-                        const toTableHeight = toTable.getBBox().height;
+                        // Calculate table heights directly
+                        const fromFieldCount = fromTable.querySelectorAll('.field-row').length;
+                        const toFieldCount = toTable.querySelectorAll('.field-row').length;
+                        const fromTableHeight = headerHeight + (fromFieldCount * fieldHeight);
+                        const toTableHeight = headerHeight + (toFieldCount * fieldHeight);
                         
                         const pathData = calculateOrthogonalPath(
                             fromX, fromY, fromStubX, toX, toY, toStubX, 15,
@@ -1142,11 +1376,91 @@ export class DbmlPreviewProvider {
                 });
             }
             
+            // Initialize table directory
+            function initializeTableDirectory() {
+                const tableDirectory = document.getElementById('tableDirectory');
+                const tableDirectoryContent = document.getElementById('tableDirectoryContent');
+                const tables = Array.from(tableLookup.values());
+                
+                if (!tableDirectoryContent) return;
+                
+                // Clear existing content
+                tableDirectoryContent.innerHTML = '';
+                directoryLookup.clear();
+                
+                // Create directory items
+                tables.forEach(table => {
+                    const tableName = table.getAttribute('data-table');
+                    const item = document.createElement('div');
+                    item.className = 'table-directory-item';
+                    item.setAttribute('data-table', tableName);
+                    item.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">' +
+                        '<path d="M4 5h16v2H4V5zm0 4h16v10H4V9zm2 2v6h12v-6H6z"/>' +
+                        '</svg>' +
+                        '<span>' + tableName + '</span>';
+                    if (tableName) {
+                        directoryLookup.set(tableName, item);
+                    }
+                    
+                    // Click handler for directory item
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        selectTable(tableName);
+                    });
+                    
+                    tableDirectoryContent.appendChild(item);
+                });
+            }
+            
+            // Select table function
+            function selectTable(tableName) {
+                // Remove previous selection
+                document.querySelectorAll('.draggable.selected').forEach(t => {
+                    t.classList.remove('selected');
+                });
+                document.querySelectorAll('.table-directory-item.selected').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                
+                // Add new selection
+                const tableGroup = tableName ? tableLookup.get(tableName) : null;
+                const directoryItem = tableName ? directoryLookup.get(tableName) : null;
+                
+                if (tableGroup) {
+                    tableGroup.classList.add('selected');
+                }
+                if (directoryItem) {
+                    directoryItem.classList.add('selected');
+                }
+            }
+            
             // Side panel and toolbar functionality
             const autoArrangeBtn = document.getElementById('autoArrangeBtn');
             const sidePanel = document.getElementById('sidePanel');
             const closePanelBtn = document.getElementById('closePanelBtn');
             const resetZoomBtn = document.getElementById('resetZoomBtn');
+            const directoryToggleBtn = document.getElementById('directoryToggleBtn');
+            const tableDirectory = document.getElementById('tableDirectory');
+            const closeDirectoryBtn = document.getElementById('closeDirectoryBtn');
+            
+            // Initialize table directory
+            initializeTableDirectory();
+            
+            // Directory toggle button
+            if (directoryToggleBtn && tableDirectory) {
+                directoryToggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    tableDirectory.classList.toggle('open');
+                });
+            }
+            
+            // Close directory button
+            if (closeDirectoryBtn && tableDirectory) {
+                closeDirectoryBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    tableDirectory.classList.remove('open');
+                });
+            }
             
             if (autoArrangeBtn && sidePanel) {
                 autoArrangeBtn.addEventListener('click', (e) => {
@@ -1188,6 +1502,45 @@ export class DbmlPreviewProvider {
                     vscode.setState(state);
                 });
             }
+            
+            // Note tooltip functionality
+            let noteTooltip = document.createElement('div');
+            noteTooltip.className = 'note-tooltip';
+            document.body.appendChild(noteTooltip);
+            
+            let hideTooltipTimeout;
+            
+            document.querySelectorAll('.field-row.has-note').forEach(fieldRow => {
+                fieldRow.addEventListener('mouseenter', function(e) {
+                    clearTimeout(hideTooltipTimeout);
+                    const note = this.getAttribute('data-note');
+                    if (note) {
+                        noteTooltip.textContent = note;
+                        
+                        // Get the position of the field row in screen coordinates
+                        const rowRect = this.getBoundingClientRect();
+                        
+                        // Position tooltip to the right of the row
+                        const tooltipX = rowRect.right + 12;
+                        const tooltipY = rowRect.top + (rowRect.height / 2);
+                        
+                        noteTooltip.style.left = tooltipX + 'px';
+                        noteTooltip.style.top = tooltipY + 'px';
+                        noteTooltip.style.transform = 'translateY(-50%)';
+                        
+                        // Show tooltip after a short delay
+                        setTimeout(() => {
+                            noteTooltip.classList.add('visible');
+                        }, 200);
+                    }
+                });
+                
+                fieldRow.addEventListener('mouseleave', function() {
+                    hideTooltipTimeout = setTimeout(() => {
+                        noteTooltip.classList.remove('visible');
+                    }, 100);
+                });
+            });
         })();
     </script>
 </body>

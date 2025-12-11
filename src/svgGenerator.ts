@@ -346,6 +346,44 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	svg += '</g>';
 	svg += '<g id="tables">';
 
+	// Build sets of primary keys and foreign keys
+	const primaryKeys = new Set<string>();
+	schema.tables.forEach(table => {
+		table.fields.forEach(field => {
+			if (field.pk) {
+				primaryKeys.add(`${table.name}.${field.name}`);
+			}
+		});
+	});
+
+	// In DBML, a reference like "Ref: posts.user_id > users.id" means:
+	// - posts.user_id is the foreign key (FK) that references users.id
+	// - users.id is the primary key being referenced (not an FK in this context)
+	// Both endpoints appear in the reference, but only the non-PK side is the FK
+	const foreignKeys = new Set<string>();
+	schema.refs.forEach(ref => {
+		if (ref.endpoints.length >= 2) {
+			// Add all fields from both endpoints
+			const allFields: string[] = [];
+			ref.endpoints.forEach(endpoint => {
+				if (endpoint.fieldNames) {
+					endpoint.fieldNames.forEach(fieldName => {
+						allFields.push(`${endpoint.tableName}.${fieldName}`);
+					});
+				}
+			});
+			
+			// Mark fields as FK if they're NOT a PK, or if both are PKs (many-to-many case)
+			allFields.forEach(fieldKey => {
+				// If this field is not a PK in its table, it's definitely a FK
+				// If it's a PK but part of a many-to-many relationship, it can also be a FK
+				if (!primaryKeys.has(fieldKey)) {
+					foreignKeys.add(fieldKey);
+				}
+			});
+		}
+	});
+
 	// Draw tables
 	tablePositions.forEach(({ table, x, y }) => {
 		const tableHeight = headerHeight + (table.fields.length * fieldHeight);
@@ -381,16 +419,18 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		table.fields.forEach((field, index) => {
 			const fieldY = headerHeight + (index * fieldHeight);
 			
+			// Escape note for HTML attribute if present
+			const escapedNote = field.note ? field.note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;') : '';
+			const hasNoteClass = field.note ? ' has-note' : '';
+			const noteDataAttr = field.note ? ` data-note="${escapedNote}"` : '';
+			
 			// Field background (for hover effect)
-			svg += `<rect y="${fieldY}" width="${tableWidth}" height="${fieldHeight}" class="field-row" fill="transparent" />`;
+			svg += `<rect y="${fieldY}" width="${tableWidth}" height="${fieldHeight}" class="field-row${hasNoteClass}" fill="transparent"${noteDataAttr} />`;
 			
 			// Field name
 			let fieldLabel = field.name;
 			let badges = '';
 			
-			if (field.pk) {
-				badges += ' PK';
-			}
 			if (field.unique) {
 				badges += ' UQ';
 			}
@@ -399,6 +439,46 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			}
 			
 			svg += `<text x="10" y="${fieldY + 20}" class="field-name" font-size="13">${fieldLabel}</text>`;
+			
+			// Icons after field name
+			const iconSize = 20;
+			const iconY = fieldY + (fieldHeight - iconSize) / 2;
+			const textWidth = fieldLabel.length * 5.5;
+			let iconX = 12 + textWidth + 4;
+			
+			// PK icon if this field is a primary key
+			if (field.pk) {
+				const pkIconSize = 16; // 20% smaller than standard icon size
+				const pkIconY = fieldY + (fieldHeight - pkIconSize) / 2;
+				svg += `<svg x="${iconX}" y="${pkIconY}" width="${pkIconSize}" height="${pkIconSize}" viewBox="0 0 24 24" opacity="0.9">`;
+				svg += `<path fill="currentColor" style="color: var(--vscode-symbolIcon-keyForeground, var(--vscode-charts-yellow, #F9DC5C));" fill-rule="evenodd" clip-rule="evenodd" d="M22.6767 1.33707C22.2865 0.946887 21.6539 0.946888 21.2637 1.33707L9.74788 12.8529C9.7071 12.8937 9.67058 12.9371 9.63833 12.9826C8.74832 12.3632 7.66658 12 6.5 12C3.46243 12 1 14.4624 1 17.5C1 20.5375 3.46243 23 6.5 23C9.53757 23 12 20.5375 12 17.5C12 16.3403 11.6411 15.2645 11.0283 14.3775C11.0749 14.3447 11.1192 14.3075 11.1609 14.2659L16.5062 8.92052L19.3096 11.7239C19.7001 12.1144 20.3333 12.1144 20.7238 11.7239C21.1143 11.3333 21.1143 10.7002 20.7238 10.3097L17.9205 7.5063L19.5062 5.92052L20.7764 7.19064C21.1669 7.58117 21.8001 7.58117 22.1906 7.19064C22.5811 6.80012 22.5811 6.16695 22.1906 5.77643L20.9205 4.5063L22.6767 2.75005C23.0669 2.35987 23.0669 1.72726 22.6767 1.33707ZM6.5 20.9791C4.57855 20.9791 3.02092 19.4214 3.02092 17.5C3.02092 15.5785 4.57855 14.0209 6.5 14.0209C8.42145 14.0209 9.97908 15.5785 9.97908 17.5C9.97908 19.4214 8.42145 20.9791 6.5 20.9791Z"/>`;
+				svg += `</svg>`;
+				iconX += pkIconSize + 2;
+			}
+			
+			// FK icon if this field is a foreign key
+			const fieldKey = `${table.name}.${field.name}`;
+			if (foreignKeys.has(fieldKey)) {
+				const fkIconSize = 16; // 20% smaller than standard icon size
+				const fkIconY = fieldY + (fieldHeight - fkIconSize) / 2;
+				svg += `<svg x="${iconX}" y="${fkIconY}" width="${fkIconSize}" height="${fkIconSize}" viewBox="0 0 24 24" opacity="0.9">`;
+				svg += `<path fill="currentColor" style="color: var(--vscode-symbolIcon-referenceForeground, var(--vscode-charts-blue, #75BEFF));" d="M13.2218 3.32234C15.3697 1.17445 18.8521 1.17445 21 3.32234C23.1479 5.47022 23.1479 8.95263 21 11.1005L17.4645 14.636C15.3166 16.7839 11.8342 16.7839 9.6863 14.636C9.48752 14.4373 9.30713 14.2271 9.14514 14.0075C8.90318 13.6796 8.97098 13.2301 9.25914 12.9419C9.73221 12.4688 10.5662 12.6561 11.0245 13.1435C11.0494 13.1699 11.0747 13.196 11.1005 13.2218C12.4673 14.5887 14.6834 14.5887 16.0503 13.2218L19.5858 9.6863C20.9526 8.31947 20.9526 6.10339 19.5858 4.73655C18.219 3.36972 16.0029 3.36972 14.636 4.73655L13.5754 5.79721C13.1849 6.18774 12.5517 6.18774 12.1612 5.79721C11.7706 5.40669 11.7706 4.77352 12.1612 4.383L13.2218 3.32234Z"/>`;
+				svg += `<path fill="currentColor" style="color: var(--vscode-symbolIcon-referenceForeground, var(--vscode-charts-blue, #75BEFF));" d="M6.85787 9.6863C8.90184 7.64233 12.2261 7.60094 14.3494 9.42268C14.7319 9.75083 14.7008 10.3287 14.3444 10.685C13.9253 11.1041 13.2317 11.0404 12.7416 10.707C11.398 9.79292 9.48593 9.88667 8.27209 11.1005L4.73655 14.636C3.36972 16.0029 3.36972 18.219 4.73655 19.5858C6.10339 20.9526 8.31947 20.9526 9.6863 19.5858L10.747 18.5251C11.1375 18.1346 11.7706 18.1346 12.1612 18.5251C12.5517 18.9157 12.5517 19.5488 12.1612 19.9394L11.1005 21C8.95263 23.1479 5.47022 23.1479 3.32234 21C1.17445 18.8521 1.17445 15.3697 3.32234 13.2218L6.85787 9.6863Z"/>`;
+				svg += `</svg>`;
+				iconX += fkIconSize + 2;
+			}
+			
+			// Note icon if this field has a note
+			if (field.note) {
+				const noteIconSize = 16; // 20% smaller than standard icon size
+				const noteIconY = fieldY + (fieldHeight - noteIconSize) / 2;
+				const noteIconClass = `note-icon note-icon-${table.name}-${field.name}`;
+				// Escape HTML characters in note
+				const escapedNote = field.note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+				svg += `<svg x="${iconX}" y="${noteIconY}" width="${noteIconSize}" height="${noteIconSize}" viewBox="0 0 24 24" opacity="0.8" class="${noteIconClass}" data-note="${escapedNote}" style="cursor: help;">`;
+				svg += `<path fill="currentColor" style="color: var(--vscode-descriptionForeground, #999);" fill-rule="evenodd" clip-rule="evenodd" d="M6 1C4.34315 1 3 2.34315 3 4V20C3 21.6569 4.34315 23 6 23H18C19.6569 23 21 21.6569 21 20V8.82843C21 8.03278 20.6839 7.26972 20.1213 6.70711L15.2929 1.87868C14.7303 1.31607 13.9672 1 13.1716 1H6ZM5 4C5 3.44772 5.44772 3 6 3H12V8C12 9.10457 12.8954 10 14 10H19V20C19 20.5523 18.5523 21 18 21H6C5.44772 21 5 20.5523 5 20V4ZM18.5858 8L14 3.41421V8H18.5858Z"/>`;
+				svg += `</svg>`;
+			}
 			
 			// Field type
 			svg += `<text x="${tableWidth - 10}" y="${fieldY + 20}" class="field-type" text-anchor="end" font-size="12" opacity="0.7">${field.type}${badges}</text>`;
