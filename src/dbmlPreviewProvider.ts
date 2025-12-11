@@ -611,6 +611,39 @@ export class DbmlPreviewProvider {
         svg .table-name {
             fill: var(--vscode-button-foreground);
         }
+
+        svg .table-group-title {
+            fill: var(--vscode-button-foreground);
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        svg g.table.group-collapsed {
+            display: none;
+        }
+
+        svg .table-group-toggle {
+            cursor: pointer;
+            color: var(--vscode-button-foreground);
+        }
+
+        svg .table-group-header {
+            cursor: move;
+        }
+
+        svg .table-group.dragging {
+            opacity: 0.85;
+        }
+
+        svg .table-group-toggle-icon {
+            width: 22px;
+            height: 22px;
+            display: block;
+        }
+
+        svg .table-group[data-collapsed="true"] .table-group-toggle-icon {
+            opacity: 0.6;
+        }
         
         svg .field-row:hover {
             fill: var(--vscode-list-hoverBackground);
@@ -1327,6 +1360,10 @@ export class DbmlPreviewProvider {
             let isDragging = false;
             let isPanning = false;
             let panStart = { x: 0, y: 0 };
+            let isGroupDragging = false;
+            let draggedGroup = null;
+            let groupDragStart = { x: 0, y: 0 };
+            let groupInitialPositions = new Map();
             
             let viewBox = { x: 0, y: 0, width: 2000, height: 2000 };
             const gridSize = 20;
@@ -1375,9 +1412,7 @@ export class DbmlPreviewProvider {
                     const toElement = toTable ? tableLookup.get(toTable) : null;
                     const shouldHide = !fromElement || !toElement ||
                         fromElement.classList.contains('hidden') ||
-                        toElement.classList.contains('hidden') ||
-                        fromElement.classList.contains('group-collapsed') ||
-                        toElement.classList.contains('group-collapsed');
+                        toElement.classList.contains('hidden');
                     line.classList.toggle('hidden', shouldHide);
                 });
             }
@@ -1445,7 +1480,15 @@ export class DbmlPreviewProvider {
 
                     element.setAttribute('transform', 'translate(' + offsetX + ', ' + offsetY + ')');
                     element.setAttribute('data-collapsed', group.collapsed ? 'true' : 'false');
+                    element.setAttribute('data-offset-x', String(offsetX));
+                    element.setAttribute('data-offset-y', String(offsetY));
+                    element.setAttribute('data-header-width', String(width));
+                    element.setAttribute('data-header-height', String(headerHeight));
                     element.classList.toggle('collapsed', group.collapsed);
+                    group.offsetX = offsetX;
+                    group.offsetY = offsetY;
+                    group.headerWidth = width;
+                    group.headerHeight = headerHeight;
 
                     headerRect.setAttribute('x', '0');
                     headerRect.setAttribute('y', '0');
@@ -1468,8 +1511,10 @@ export class DbmlPreviewProvider {
                     }
                     const toggleIcon = toggle.querySelector('.table-group-toggle-icon');
                     if (toggleIcon) {
-                        toggleIcon.setAttribute('d', group.collapsed ? 'M 6 11 L 16 11' : 'M 6 11 L 16 11 M 11 6 L 11 16');
+                        toggleIcon.classList.toggle('is-collapsed', group.collapsed);
                     }
+                    toggle.classList.toggle('collapsed', group.collapsed);
+                    toggle.setAttribute('aria-pressed', group.collapsed ? 'true' : 'false');
 
                     bodyRect.setAttribute('x', '0');
                     bodyRect.setAttribute('y', String(headerHeight));
@@ -1504,6 +1549,98 @@ export class DbmlPreviewProvider {
                 });
                 updateGroupLayouts();
                 refreshRelationshipVisibility();
+                updateRelationships();
+            }
+
+            function arrangeTablesWithinGroups() {
+                const tableWidth = 250;
+                const horizontalSpacing = 120;
+                const verticalSpacing = 80;
+                let changed = false;
+
+                tableGroups.forEach(group => {
+                    const memberTables = group.tables
+                        .map(name => tableLookup.get(name))
+                        .filter(table => Boolean(table));
+
+                    if (memberTables.length === 0) {
+                        return;
+                    }
+
+                    const hasStoredPositions = memberTables.every(table => {
+                        const tableName = table.getAttribute('data-table');
+                        return Boolean(tableName && Object.prototype.hasOwnProperty.call(positions, tableName));
+                    });
+
+                    if (hasStoredPositions) {
+                        return;
+                    }
+
+                    const sortedTables = memberTables.slice().sort((a, b) => {
+                        const ay = Number.parseFloat(a.getAttribute('data-y') || '0');
+                        const by = Number.parseFloat(b.getAttribute('data-y') || '0');
+                        if (Number.isFinite(ay) && Number.isFinite(by) && ay !== by) {
+                            return ay - by;
+                        }
+                        const ax = Number.parseFloat(a.getAttribute('data-x') || '0');
+                        const bx = Number.parseFloat(b.getAttribute('data-x') || '0');
+                        if (Number.isFinite(ax) && Number.isFinite(bx)) {
+                            return ax - bx;
+                        }
+                        return 0;
+                    });
+
+                    let anchorX = Number.POSITIVE_INFINITY;
+                    let anchorY = Number.POSITIVE_INFINITY;
+
+                    sortedTables.forEach(table => {
+                        const currentX = Number.parseFloat(table.getAttribute('data-x') || '0');
+                        const currentY = Number.parseFloat(table.getAttribute('data-y') || '0');
+                        if (Number.isFinite(currentX)) {
+                            anchorX = Math.min(anchorX, currentX);
+                        }
+                        if (Number.isFinite(currentY)) {
+                            anchorY = Math.min(anchorY, currentY);
+                        }
+                    });
+
+                    if (!Number.isFinite(anchorX)) {
+                        anchorX = 100;
+                    }
+                    if (!Number.isFinite(anchorY)) {
+                        anchorY = 100;
+                    }
+
+                    const columns = Math.max(1, Math.ceil(Math.sqrt(sortedTables.length)));
+                    let columnIndex = 0;
+                    let currentX = anchorX;
+                    let currentY = anchorY;
+                    let maxHeightInRow = 0;
+
+                    sortedTables.forEach(table => {
+                        const heightAttr = table.getAttribute('data-height');
+                        let tableHeight = Number.parseFloat(heightAttr || '0');
+                        if (!Number.isFinite(tableHeight) || tableHeight <= 0) {
+                            tableHeight = getTableHeight(table);
+                        }
+
+                        setTablePosition(table, currentX, currentY);
+                        changed = true;
+
+                        maxHeightInRow = Math.max(maxHeightInRow, tableHeight);
+                        columnIndex++;
+                        if (columnIndex >= columns) {
+                            columnIndex = 0;
+                            currentX = anchorX;
+                            currentY += maxHeightInRow + verticalSpacing;
+                            maxHeightInRow = 0;
+                        } else {
+                            currentX += tableWidth + horizontalSpacing;
+                        }
+                    });
+                });
+
+                return changed;
             }
 
             function initializeGroups() {
@@ -1555,8 +1692,14 @@ export class DbmlPreviewProvider {
                     }
                 });
 
+                const rearranged = arrangeTablesWithinGroups();
                 updateGroupLayouts();
+                updateRelationships();
                 refreshRelationshipVisibility();
+                if (rearranged) {
+                    persistState();
+                    scheduleLayoutSave();
+                }
             }
 
             function getActiveView() {
@@ -1658,6 +1801,20 @@ export class DbmlPreviewProvider {
                 const fieldHeight = 30;
                 const headerHeight = 40;
                 return headerHeight + (fieldCount * fieldHeight);
+            }
+
+            function setTablePosition(table, x, y, updateState = true) {
+                const snappedX = Math.round(x / gridSize) * gridSize;
+                const snappedY = Math.round(y / gridSize) * gridSize;
+                table.setAttribute('transform', 'translate(' + snappedX + ', ' + snappedY + ')');
+                table.setAttribute('data-x', String(snappedX));
+                table.setAttribute('data-y', String(snappedY));
+                if (updateState) {
+                    const tableName = table.getAttribute('data-table');
+                    if (tableName) {
+                        positions[tableName] = { x: snappedX, y: snappedY };
+                    }
+                }
             }
             
             function checkCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
@@ -1978,14 +2135,14 @@ export class DbmlPreviewProvider {
             // Hover effect for tables and relationships
             document.querySelectorAll('.draggable').forEach(table => {
                 table.addEventListener('mouseenter', function() {
-                    if (!isDragging) {
+                    if (!isDragging && !isGroupDragging) {
                         const tableName = this.getAttribute('data-table');
                         highlightRelationships(tableName, true);
                     }
                 });
                 
                 table.addEventListener('mouseleave', function() {
-                    if (!isDragging) {
+                    if (!isDragging && !isGroupDragging) {
                         const tableName = this.getAttribute('data-table');
                         highlightRelationships(tableName, false);
                     }
@@ -2034,6 +2191,38 @@ export class DbmlPreviewProvider {
             // Mouse down - start dragging or panning
             document.addEventListener('mousedown', (e) => {
                 const target = e.target;
+                const groupHeader = target.closest('.table-group-header');
+                if (groupHeader && !target.closest('.table-group-toggle')) {
+                    const groupElement = groupHeader.closest('.table-group');
+                    const groupName = groupElement ? groupElement.getAttribute('data-group') : null;
+                    const groupData = groupName ? tableGroups.get(groupName) : null;
+                    if (groupData && Array.isArray(groupData.tables) && groupData.tables.length > 0) {
+                        isGroupDragging = true;
+                        draggedGroup = groupData;
+                        selectedTable = null;
+                        groupInitialPositions = new Map();
+                        groupData.tables.forEach(tableName => {
+                            const table = tableLookup.get(tableName);
+                            if (!table) {
+                                return;
+                            }
+                            const tableX = Number.parseFloat(table.getAttribute('data-x') || '0');
+                            const tableY = Number.parseFloat(table.getAttribute('data-y') || '0');
+                            groupInitialPositions.set(table, { x: tableX, y: tableY });
+                        });
+                        const pt = svg.createSVGPoint();
+                        pt.x = e.clientX;
+                        pt.y = e.clientY;
+                        const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+                        groupDragStart.x = svgP.x;
+                        groupDragStart.y = svgP.y;
+                        if (groupData.element) {
+                            groupData.element.classList.add('dragging');
+                        }
+                        e.preventDefault();
+                        return;
+                    }
+                }
                 const tableGroup = target.closest('.draggable');
                 
                 // Check if click is outside any table (deselect)
@@ -2085,7 +2274,25 @@ export class DbmlPreviewProvider {
             
             // Mouse move - drag table or pan canvas
             document.addEventListener('mousemove', (e) => {
-                if (isDragging && selectedTable) {
+                if (isGroupDragging && draggedGroup) {
+                    const pt = svg.createSVGPoint();
+                    pt.x = e.clientX;
+                    pt.y = e.clientY;
+                    const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+                    const deltaX = svgP.x - groupDragStart.x;
+                    const deltaY = svgP.y - groupDragStart.y;
+
+                    groupInitialPositions.forEach((pos, table) => {
+                        const nextX = pos.x + deltaX;
+                        const nextY = pos.y + deltaY;
+                        setTablePosition(table, nextX, nextY, false);
+                    });
+
+                    updateGroupLayouts();
+                    updateRelationships();
+                    e.preventDefault();
+                } else if (isDragging && selectedTable) {
                     const pt = svg.createSVGPoint();
                     pt.x = e.clientX;
                     pt.y = e.clientY;
@@ -2119,7 +2326,27 @@ export class DbmlPreviewProvider {
             
             // Mouse up - stop dragging or panning
             document.addEventListener('mouseup', (e) => {
-                if (isDragging && selectedTable) {
+                if (isGroupDragging && draggedGroup) {
+                    if (draggedGroup.element) {
+                        draggedGroup.element.classList.remove('dragging');
+                    }
+                    groupInitialPositions.forEach((_, table) => {
+                        const tableName = table.getAttribute('data-table');
+                        if (!tableName) {
+                            return;
+                        }
+                        const x = Number.parseFloat(table.getAttribute('data-x') || '0');
+                        const y = Number.parseFloat(table.getAttribute('data-y') || '0');
+                        positions[tableName] = { x, y };
+                    });
+                    updateGroupLayouts();
+                    updateRelationships();
+                    persistState();
+                    scheduleLayoutSave();
+                    isGroupDragging = false;
+                    draggedGroup = null;
+                    groupInitialPositions = new Map();
+                } else if (isDragging && selectedTable) {
                     selectedTable.classList.remove('dragging');
                     
                     // Save positions
@@ -2186,11 +2413,10 @@ export class DbmlPreviewProvider {
             
             // Calculate orthogonal path with stub segments to prevent edge alignment
             function calculateOrthogonalPath(
-                startX, startY, stubStartX, 
+                startX, startY, stubStartX,
                 endX, endY, stubEndX, radius,
-                fromTableX, fromTableY, fromTableHeight,
-                toTableX, toTableY, toTableHeight,
-                tableWidth
+                fromTableX, fromTableY, fromTableWidth, fromTableHeight,
+                toTableX, toTableY, toTableWidth, toTableHeight
             ) {
                 let path = 'M ' + startX + ' ' + startY;
                 
@@ -2198,9 +2424,9 @@ export class DbmlPreviewProvider {
                 path += ' L ' + stubStartX + ' ' + startY;
                 
                 // Check if the vertical line at stubStartX would pass through either table
-                const fromTableRight = fromTableX + tableWidth;
+                const fromTableRight = fromTableX + fromTableWidth;
                 const fromTableBottom = fromTableY + fromTableHeight;
-                const toTableRight = toTableX + tableWidth;
+                const toTableRight = toTableX + toTableWidth;
                 const toTableBottom = toTableY + toTableHeight;
                 
                 // Check if stubStartX is within the horizontal range of either table
@@ -2268,78 +2494,131 @@ export class DbmlPreviewProvider {
             
             // Update relationship lines
             function updateRelationships() {
-                const tableWidth = 250;
+                const defaultTableWidth = 250;
                 const fieldHeight = 30;
                 const headerHeight = 40;
-                
+                const groupHeaderHeight = 46;
+                const stubLength = 40;
+
+                function getGroupForTable(table) {
+                    const groupName = table.getAttribute('data-group');
+                    if (!groupName) {
+                        return null;
+                    }
+                    return tableGroups.get(groupName) || null;
+                }
+
+                function getGroupBounds(group) {
+                    const element = group.element;
+                    const offsetXAttr = element.getAttribute('data-offset-x');
+                    const offsetYAttr = element.getAttribute('data-offset-y');
+                    const widthAttr = element.getAttribute('data-header-width');
+                    const heightAttr = element.getAttribute('data-header-height');
+                    const offsetX = Number.parseFloat(offsetXAttr ?? String(group.offsetX ?? 0));
+                    const offsetY = Number.parseFloat(offsetYAttr ?? String(group.offsetY ?? 0));
+                    const width = Number.parseFloat(widthAttr ?? String(group.headerWidth ?? 0));
+                    const height = Number.parseFloat(heightAttr ?? String(group.headerHeight ?? 0));
+                    return {
+                        x: Number.isFinite(offsetX) ? offsetX : 0,
+                        y: Number.isFinite(offsetY) ? offsetY : 0,
+                        width: Number.isFinite(width) && width > 0 ? width : defaultTableWidth,
+                        height: Number.isFinite(height) && height > 0 ? height : groupHeaderHeight
+                    };
+                }
+
+                function buildEndpointInfo(table, fieldOffset) {
+                    const tableX = Number.parseFloat(table.getAttribute('data-x') || '0');
+                    const tableY = Number.parseFloat(table.getAttribute('data-y') || '0');
+
+                    if (!Number.isFinite(tableX) || !Number.isFinite(tableY)) {
+                        return null;
+                    }
+
+                    if (!table.classList.contains('group-collapsed')) {
+                        const fieldCount = table.querySelectorAll('.field-row').length;
+                        const tableHeight = headerHeight + (fieldCount * fieldHeight);
+                        const anchorY = tableY + headerHeight + (fieldOffset * fieldHeight) + (fieldHeight / 2);
+                        return {
+                            x: tableX,
+                            y: tableY,
+                            width: defaultTableWidth,
+                            height: tableHeight,
+                            anchorY
+                        };
+                    }
+
+                    const group = getGroupForTable(table);
+                    if (group) {
+                        const bounds = getGroupBounds(group);
+                        return {
+                            x: bounds.x,
+                            y: bounds.y,
+                            width: bounds.width,
+                            height: bounds.height,
+                            anchorY: bounds.y + bounds.height / 2,
+                            collapsedToGroup: true
+                        };
+                    }
+
+                    const fallbackFieldCount = table.querySelectorAll('.field-row').length;
+                    const fallbackHeight = headerHeight + (fallbackFieldCount * fieldHeight);
+                    return {
+                        x: tableX,
+                        y: tableY,
+                        width: defaultTableWidth,
+                        height: fallbackHeight,
+                        anchorY: tableY + fallbackHeight / 2
+                    };
+                }
+
                 document.querySelectorAll('.relationship-line').forEach(line => {
                     const fromTableName = line.getAttribute('data-from');
                     const toTableName = line.getAttribute('data-to');
-                    
+
                     const fromTable = fromTableName ? tableLookup.get(fromTableName) : null;
                     const toTable = toTableName ? tableLookup.get(toTableName) : null;
-                    
-                    if (fromTable && toTable) {
-                        const fromTableX = parseFloat(fromTable.getAttribute('data-x')) || 0;
-                        const fromTableY = parseFloat(fromTable.getAttribute('data-y')) || 0;
-                        const toTableX = parseFloat(toTable.getAttribute('data-x')) || 0;
-                        const toTableY = parseFloat(toTable.getAttribute('data-y')) || 0;
-                        
-                        // Skip if any coordinate is invalid
-                        if (isNaN(fromTableX) || isNaN(fromTableY) || isNaN(toTableX) || isNaN(toTableY)) {
-                            return;
-                        }
-                        
-                        // Get stored field offsets from data attributes
-                        const fromFieldOffset = parseFloat(line.getAttribute('data-from-field-offset') || '0');
-                        const toFieldOffset = parseFloat(line.getAttribute('data-to-field-offset') || '0');
-                        
-                        // Calculate precise Y positions for fields
-                        const fromY = fromTableY + headerHeight + (fromFieldOffset * fieldHeight) + (fieldHeight / 2);
-                        const toY = toTableY + headerHeight + (toFieldOffset * fieldHeight) + (fieldHeight / 2);
-                        
-                        // Connection stub length - distance from table edge before first turn
-                        const stubLength = 40;
-                        
-                        // Use intelligent side selection
-                        const sides = calculateBestConnectionSides(
-                            fromTableX, fromY, tableWidth,
-                            toTableX, toY, tableWidth
-                        );
-                        
-                        let fromX, toX, fromStubX, toStubX;
-                        
-                        // Set connection points based on calculated best sides
-                        if (sides.fromSide === 'right') {
-                            fromX = fromTableX + tableWidth;
-                            fromStubX = fromX + stubLength;
-                        } else {
-                            fromX = fromTableX;
-                            fromStubX = fromX - stubLength;
-                        }
-                        
-                        if (sides.toSide === 'right') {
-                            toX = toTableX + tableWidth;
-                            toStubX = toX + stubLength;
-                        } else {
-                            toX = toTableX;
-                            toStubX = toX - stubLength;
-                        }
-                        
-                        // Calculate table heights directly
-                        const fromFieldCount = fromTable.querySelectorAll('.field-row').length;
-                        const toFieldCount = toTable.querySelectorAll('.field-row').length;
-                        const fromTableHeight = headerHeight + (fromFieldCount * fieldHeight);
-                        const toTableHeight = headerHeight + (toFieldCount * fieldHeight);
-                        
-                        const pathData = calculateOrthogonalPath(
-                            fromX, fromY, fromStubX, toX, toY, toStubX, 15,
-                            fromTableX, fromTableY, fromTableHeight,
-                            toTableX, toTableY, toTableHeight,
-                            tableWidth
-                        );
-                        line.setAttribute('d', pathData);
+
+                    if (!fromTable || !toTable) {
+                        return;
                     }
+
+                    const fromFieldOffset = Number.parseFloat(line.getAttribute('data-from-field-offset') || '0');
+                    const toFieldOffset = Number.parseFloat(line.getAttribute('data-to-field-offset') || '0');
+
+                    const fromInfo = buildEndpointInfo(fromTable, fromFieldOffset);
+                    const toInfo = buildEndpointInfo(toTable, toFieldOffset);
+
+                    if (!fromInfo || !toInfo) {
+                        return;
+                    }
+
+                    const sides = calculateBestConnectionSides(
+                        fromInfo.x, fromInfo.anchorY, fromInfo.width,
+                        toInfo.x, toInfo.anchorY, toInfo.width
+                    );
+
+                    let fromX = fromInfo.x;
+                    let fromStubX = fromX - stubLength;
+                    if (sides.fromSide === 'right') {
+                        fromX = fromInfo.x + fromInfo.width;
+                        fromStubX = fromX + stubLength;
+                    }
+
+                    let toX = toInfo.x;
+                    let toStubX = toX - stubLength;
+                    if (sides.toSide === 'right') {
+                        toX = toInfo.x + toInfo.width;
+                        toStubX = toX + stubLength;
+                    }
+
+                    const pathData = calculateOrthogonalPath(
+                        fromX, fromInfo.anchorY, fromStubX,
+                        toX, toInfo.anchorY, toStubX,
+                        15,
+                        fromInfo.x, fromInfo.y, fromInfo.width, fromInfo.height,
+                        toInfo.x, toInfo.y, toInfo.width, toInfo.height
+                    );
+                    line.setAttribute('d', pathData);
                 });
             }
             
