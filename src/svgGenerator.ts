@@ -69,17 +69,82 @@ function calculateBestConnectionSides(fromX: number, fromY: number, fromWidth: n
 }
 
 // Calculate orthogonal path with stub segments to prevent edge alignment
-function calculateOrthogonalPath(startX: number, startY: number, stubStartX: number, endX: number, endY: number, stubEndX: number, gridSize: number, radius: number): string {
+function calculateOrthogonalPath(
+	startX: number, startY: number, stubStartX: number, 
+	endX: number, endY: number, stubEndX: number, 
+	gridSize: number, radius: number,
+	fromTableX: number, fromTableY: number, fromTableHeight: number,
+	toTableX: number, toTableY: number, toTableHeight: number,
+	tableWidth: number
+): string {
 	let path = `M ${startX} ${startY}`;
 	
 	// First horizontal stub from table edge
 	path += ` L ${stubStartX} ${startY}`;
 	
-	// Vertical segment (straight 90 degree turn)
-	path += ` L ${stubStartX} ${endY}`;
+	// Check if the vertical line at stubStartX would pass through either table
+	const fromTableRight = fromTableX + tableWidth;
+	const fromTableBottom = fromTableY + fromTableHeight;
+	const toTableRight = toTableX + tableWidth;
+	const toTableBottom = toTableY + toTableHeight;
 	
-	// Horizontal segment to end stub
-	path += ` L ${stubEndX} ${endY}`;
+	// Check if stubStartX is within the horizontal range of either table
+	const passesFromTable = stubStartX >= fromTableX && stubStartX <= fromTableRight;
+	const passesToTable = stubStartX >= toTableX && stubStartX <= toTableRight;
+	
+	// Check if we need to route around tables
+	let needsReroute = false;
+	let intermediateY = 0;
+	
+	if (passesFromTable) {
+		// Check if line would pass through from table vertically
+		const minY = Math.min(startY, endY);
+		const maxY = Math.max(startY, endY);
+		if (!(maxY < fromTableY || minY > fromTableBottom)) {
+			needsReroute = true;
+			// Route above or below the from table
+			if (startY < fromTableY && endY > fromTableBottom) {
+				// Line crosses the table - route around it
+				intermediateY = fromTableY - 30; // Route above
+			} else if (startY > fromTableBottom && endY < fromTableY) {
+				intermediateY = fromTableBottom + 30; // Route below
+			} else if (startY < endY) {
+				intermediateY = fromTableY - 30; // Going down - route above
+			} else {
+				intermediateY = fromTableBottom + 30; // Going up - route below
+			}
+		}
+	}
+	
+	if (!needsReroute && passesToTable) {
+		// Check if line would pass through to table vertically
+		const minY = Math.min(startY, endY);
+		const maxY = Math.max(startY, endY);
+		if (!(maxY < toTableY || minY > toTableBottom)) {
+			needsReroute = true;
+			// Route above or below the to table
+			if (startY < toTableY && endY > toTableBottom) {
+				intermediateY = toTableY - 30;
+			} else if (startY > toTableBottom && endY < toTableY) {
+				intermediateY = toTableBottom + 30;
+			} else if (startY < endY) {
+				intermediateY = toTableY - 30;
+			} else {
+				intermediateY = toTableBottom + 30;
+			}
+		}
+	}
+	
+	if (needsReroute) {
+		// Three-segment path: horizontal -> vertical -> horizontal -> vertical
+		path += ` L ${stubStartX} ${intermediateY}`;
+		path += ` L ${stubEndX} ${intermediateY}`;
+		path += ` L ${stubEndX} ${endY}`;
+	} else {
+		// Simple two-segment path
+		path += ` L ${stubStartX} ${endY}`;
+		path += ` L ${stubEndX} ${endY}`;
+	}
 	
 	// Final horizontal stub to table edge
 	path += ` L ${endX} ${endY}`;
@@ -106,11 +171,26 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			x = pos.x;
 			y = pos.y;
 		} else {
-			// Default grid layout - snap to grid
+			// Default grid layout - calculate based on actual table heights
 			const row = Math.floor(index / tablesPerRow);
 			const col = index % tablesPerRow;
+			
+			// Calculate cumulative height for this row
+			let rowY = 50;
+			for (let r = 0; r < row; r++) {
+				let maxHeightInRow = 0;
+				for (let c = 0; c < tablesPerRow; c++) {
+					const tableIndex = r * tablesPerRow + c;
+					if (tableIndex < schema.tables.length) {
+						const tableHeight = headerHeight + (schema.tables[tableIndex].fields.length * fieldHeight);
+						maxHeightInRow = Math.max(maxHeightInRow, tableHeight);
+					}
+				}
+				rowY += maxHeightInRow + tableSpacing;
+			}
+			
 			x = Math.round((col * (tableWidth + tableSpacing) + 50) / gridSize) * gridSize;
-			y = Math.round((row * 350 + 50) / gridSize) * gridSize;
+			y = Math.round(rowY / gridSize) * gridSize;
 		}
 		
 		tablePositions.push({ table, x, y });
@@ -229,8 +309,17 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					markerEnd = 'url(#zero-one-marker)';
 				}
 				
+				// Calculate table heights
+				const fromTableHeight = headerHeight + (fromPos.table.fields.length * fieldHeight);
+				const toTableHeight = headerHeight + (toPos.table.fields.length * fieldHeight);
+				
 				// Calculate orthogonal path with stub points to prevent edge alignment
-				const pathData = calculateOrthogonalPath(fromX, fromY, fromStubX, toX, toY, toStubX, gridSize, 15);
+				const pathData = calculateOrthogonalPath(
+					fromX, fromY, fromStubX, toX, toY, toStubX, gridSize, 15,
+					fromPos.x, fromPos.y, fromTableHeight,
+					toPos.x, toPos.y, toTableHeight,
+					tableWidth
+				);
 				
 				svg += `<path 
 					d="${pathData}"
