@@ -636,9 +636,13 @@ export class DbmlPreviewProvider {
         }
 
         svg .table-group-toggle-icon {
-            width: 22px;
-            height: 22px;
+            width: 26px;
+            height: 26px;
             display: block;
+        }
+
+        svg .table-group-toggle-icon use {
+            fill: currentColor;
         }
 
         svg .table-group[data-collapsed="true"] .table-group-toggle-icon {
@@ -655,23 +659,14 @@ export class DbmlPreviewProvider {
         }
         
         svg .draggable.selected .table {
-            filter: brightness(1.08) drop-shadow(0 0 3px var(--vscode-button-background));
+            filter: brightness(1.08) drop-shadow(0 0 6px rgba(0, 0, 0, 0.35));
         }
         
         svg .draggable.selected .table-border {
-            stroke: var(--vscode-button-background);
-            stroke-width: 2.2;
-            filter: drop-shadow(0 0 2px var(--vscode-button-background));
-            animation: pulse-border 2s ease-in-out infinite;
-        }
-        
-        @keyframes pulse-border {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.7;
-            }
+            stroke: none;
+            stroke-width: 0;
+            filter: none;
+            animation: none;
         }
         
         .error {
@@ -1500,18 +1495,15 @@ export class DbmlPreviewProvider {
                     title.setAttribute('x', String(titleX));
                     title.setAttribute('y', String(titleY));
 
-                    const toggleSize = 22;
+                    const toggleSize = 26;
                     const toggleX = width - toggleSize - 16;
                     const toggleY = (headerHeight - toggleSize) / 2;
                     toggle.setAttribute('transform', 'translate(' + toggleX + ', ' + toggleY + ')');
-                    const toggleBg = toggle.querySelector('.table-group-toggle-bg');
-                    if (toggleBg) {
-                        toggleBg.setAttribute('width', String(toggleSize));
-                        toggleBg.setAttribute('height', String(toggleSize));
-                    }
                     const toggleIcon = toggle.querySelector('.table-group-toggle-icon');
                     if (toggleIcon) {
                         toggleIcon.classList.toggle('is-collapsed', group.collapsed);
+                        toggleIcon.setAttribute('width', String(toggleSize));
+                        toggleIcon.setAttribute('height', String(toggleSize));
                     }
                     toggle.classList.toggle('collapsed', group.collapsed);
                     toggle.setAttribute('aria-pressed', group.collapsed ? 'true' : 'false');
