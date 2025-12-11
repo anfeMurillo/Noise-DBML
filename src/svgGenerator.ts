@@ -29,6 +29,45 @@ export interface ParsedSchema {
 	refs: ParsedRef[];
 }
 
+// Calculate the best connection sides based on table positions
+function calculateBestConnectionSides(fromX: number, fromY: number, fromWidth: number, toX: number, toY: number, toWidth: number): { fromSide: 'left' | 'right', toSide: 'left' | 'right' } {
+	// Calculate all 4 possible connection combinations
+	const options = [
+		// Right to Left
+		{ fromSide: 'right' as const, toSide: 'left' as const, fromPoint: fromX + fromWidth, toPoint: toX },
+		// Right to Right
+		{ fromSide: 'right' as const, toSide: 'right' as const, fromPoint: fromX + fromWidth, toPoint: toX + toWidth },
+		// Left to Left
+		{ fromSide: 'left' as const, toSide: 'left' as const, fromPoint: fromX, toPoint: toX },
+		// Left to Right
+		{ fromSide: 'left' as const, toSide: 'right' as const, fromPoint: fromX, toPoint: toX + toWidth },
+	];
+	
+	// Calculate Manhattan distance for each option
+	const optionsWithDistance = options.map(opt => {
+		const dx = Math.abs(opt.toPoint - opt.fromPoint);
+		const dy = Math.abs(toY - fromY);
+		const distance = dx + dy;
+		
+		// Penalize connections that go backwards (less intuitive)
+		let penalty = 0;
+		if (opt.fromSide === 'right' && opt.toPoint < opt.fromPoint) {
+			penalty = 200; // Going backwards to the left
+		} else if (opt.fromSide === 'left' && opt.toPoint > opt.fromPoint) {
+			penalty = 200; // Going backwards to the right
+		}
+		
+		return { ...opt, distance: distance + penalty };
+	});
+	
+	// Choose the option with shortest distance
+	const best = optionsWithDistance.reduce((best, current) => 
+		current.distance < best.distance ? current : best
+	);
+	
+	return { fromSide: best.fromSide, toSide: best.toSide };
+}
+
 // Calculate orthogonal path with stub segments to prevent edge alignment
 function calculateOrthogonalPath(startX: number, startY: number, stubStartX: number, endX: number, endY: number, stubEndX: number, gridSize: number, radius: number): string {
 	let path = `M ${startX} ${startY}`;
@@ -40,12 +79,12 @@ function calculateOrthogonalPath(startX: number, startY: number, stubStartX: num
 	const dx = stubEndX - stubStartX;
 	
 	// Create path with proper direction handling
-	if (dy !== 0) {
+	if (Math.abs(dy) > radius * 2) {
 		// Determine direction for proper radius application
 		const goingRight = dx > 0;
 		const goingDown = dy > 0;
 		
-		// First turn at start stub point
+		// First turn at start stub point (horizontal to vertical)
 		if (goingDown) {
 			path += ` Q ${stubStartX} ${startY} ${stubStartX} ${startY + radius}`;
 		} else {
@@ -60,11 +99,7 @@ function calculateOrthogonalPath(startX: number, startY: number, stubStartX: num
 		}
 		
 		// Second turn (from vertical to horizontal towards end stub)
-		if (goingDown && goingRight) {
-			path += ` Q ${stubStartX} ${endY} ${stubStartX + radius} ${endY}`;
-		} else if (goingDown && !goingRight) {
-			path += ` Q ${stubStartX} ${endY} ${stubStartX - radius} ${endY}`;
-		} else if (!goingDown && goingRight) {
+		if (goingRight) {
 			path += ` Q ${stubStartX} ${endY} ${stubStartX + radius} ${endY}`;
 		} else {
 			path += ` Q ${stubStartX} ${endY} ${stubStartX - radius} ${endY}`;
@@ -77,15 +112,12 @@ function calculateOrthogonalPath(startX: number, startY: number, stubStartX: num
 			path += ` L ${stubEndX + radius} ${endY}`;
 		}
 		
-		// Final turn at end stub point (no additional line needed)
-		if (goingRight) {
-			path += ` Q ${stubEndX} ${endY} ${stubEndX} ${endY}`;
-		} else {
-			path += ` Q ${stubEndX} ${endY} ${stubEndX} ${endY}`;
-		}
+		// Final turn at end stub point (horizontal back to table edge direction)
+		// This is actually not needed since stubEndX and endX are on same Y
+		// Just continue with straight line
 	} else {
-		// Same Y - straight horizontal line
-		path += ` L ${stubEndX} ${endY}`;
+		// If vertical distance is too small for curves, just draw straight horizontal line
+		path += ` L ${stubEndX} ${startY}`;
 	}
 	
 	// Final horizontal stub to table edge
@@ -161,28 +193,32 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				const fromFieldY = fromPos.y + headerHeight + (fromFieldIndex * fieldHeight) + (fieldHeight / 2);
 				const toFieldY = toPos.y + headerHeight + (toFieldIndex * fieldHeight) + (fieldHeight / 2);
 				
-				// Determine which side to connect based on relative position
-				const fromCenterX = fromPos.x + tableWidth / 2;
-				const toCenterX = toPos.x + tableWidth / 2;
-				
 				// Connection stub length - distance from table edge before first turn
 				const stubLength = 40;
 				
+				// Use intelligent side selection
+				const sides = calculateBestConnectionSides(
+					fromPos.x, fromFieldY, tableWidth,
+					toPos.x, toFieldY, tableWidth
+				);
+				
 				let fromX: number, toX: number, fromStubX: number, toStubX: number;
 				
-				// Determine connection sides and create stub points
-				if (toCenterX > fromCenterX) {
-					// Target is to the right
-					fromX = fromPos.x + tableWidth; // Exit point at right edge
-					toX = toPos.x; // Entry point at left edge
-					fromStubX = fromX + stubLength; // Stub extends to the right
-					toStubX = toX - stubLength; // Stub extends to the left
+				// Set connection points based on calculated best sides
+				if (sides.fromSide === 'right') {
+					fromX = fromPos.x + tableWidth;
+					fromStubX = fromX + stubLength;
 				} else {
-					// Target is to the left
-					fromX = fromPos.x; // Exit point at left edge
-					toX = toPos.x + tableWidth; // Entry point at right edge
-					fromStubX = fromX - stubLength; // Stub extends to the left
-					toStubX = toX + stubLength; // Stub extends to the right
+					fromX = fromPos.x;
+					fromStubX = fromX - stubLength;
+				}
+				
+				if (sides.toSide === 'right') {
+					toX = toPos.x + tableWidth;
+					toStubX = toX + stubLength;
+				} else {
+					toX = toPos.x;
+					toStubX = toX - stubLength;
 				}
 				
 				const fromY = fromFieldY;
@@ -215,6 +251,8 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					data-to-stub-x="${toStubX}"
 					data-from-field-offset="${fromFieldIndex}"
 					data-to-field-offset="${toFieldIndex}"
+					data-from-side="${sides.fromSide}"
+					data-to-side="${sides.toSide}"
 				/>`;
 				
 				// Add cardinality label

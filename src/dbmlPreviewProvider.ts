@@ -485,6 +485,45 @@ export class DbmlPreviewProvider {
                 }
             });
             
+            // Calculate the best connection sides based on table positions
+            function calculateBestConnectionSides(fromX, fromY, fromWidth, toX, toY, toWidth) {
+                // Calculate all 4 possible connection combinations
+                const options = [
+                    // Right to Left
+                    { fromSide: 'right', toSide: 'left', fromPoint: fromX + fromWidth, toPoint: toX },
+                    // Right to Right
+                    { fromSide: 'right', toSide: 'right', fromPoint: fromX + fromWidth, toPoint: toX + toWidth },
+                    // Left to Left
+                    { fromSide: 'left', toSide: 'left', fromPoint: fromX, toPoint: toX },
+                    // Left to Right
+                    { fromSide: 'left', toSide: 'right', fromPoint: fromX, toPoint: toX + toWidth },
+                ];
+                
+                // Calculate Manhattan distance for each option
+                const optionsWithDistance = options.map(opt => {
+                    const dx = Math.abs(opt.toPoint - opt.fromPoint);
+                    const dy = Math.abs(toY - fromY);
+                    const distance = dx + dy;
+                    
+                    // Penalize connections that go backwards (less intuitive)
+                    let penalty = 0;
+                    if (opt.fromSide === 'right' && opt.toPoint < opt.fromPoint) {
+                        penalty = 200; // Going backwards to the left
+                    } else if (opt.fromSide === 'left' && opt.toPoint > opt.fromPoint) {
+                        penalty = 200; // Going backwards to the right
+                    }
+                    
+                    return { ...opt, distance: distance + penalty };
+                });
+                
+                // Choose the option with shortest distance
+                const best = optionsWithDistance.reduce((best, current) => 
+                    current.distance < best.distance ? current : best
+                );
+                
+                return { fromSide: best.fromSide, toSide: best.toSide };
+            }
+            
             // Calculate orthogonal path with stub segments to prevent edge alignment
             function calculateOrthogonalPath(startX, startY, stubStartX, endX, endY, stubEndX, radius) {
                 let path = 'M ' + startX + ' ' + startY;
@@ -493,34 +532,46 @@ export class DbmlPreviewProvider {
                 path += ' L ' + stubStartX + ' ' + startY;
                 
                 const dy = endY - startY;
+                const dx = stubEndX - stubStartX;
                 
-                // Create a three-segment path: horizontal -> vertical -> horizontal
-                if (dy !== 0) {
-                    // First turn at stub point
-                    if (dy > 0) {
+                // Create path with proper direction handling
+                if (Math.abs(dy) > radius * 2) {
+                    // Determine direction for proper radius application
+                    const goingRight = dx > 0;
+                    const goingDown = dy > 0;
+                    
+                    // First turn at start stub point (horizontal to vertical)
+                    if (goingDown) {
                         path += ' Q ' + stubStartX + ' ' + startY + ' ' + stubStartX + ' ' + (startY + radius);
-                        path += ' L ' + stubStartX + ' ' + (endY - radius);
-                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX + radius) + ' ' + endY;
                     } else {
                         path += ' Q ' + stubStartX + ' ' + startY + ' ' + stubStartX + ' ' + (startY - radius);
-                        path += ' L ' + stubStartX + ' ' + (endY + radius);
-                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX + radius) + ' ' + endY;
                     }
                     
-                    // Horizontal to target stub
-                    path += ' L ' + (stubEndX - radius) + ' ' + endY;
-                    
-                    // Final turn to target stub
-                    if (dy > 0) {
-                        path += ' Q ' + stubEndX + ' ' + endY + ' ' + stubEndX + ' ' + (endY - radius);
-                        path += ' L ' + stubEndX + ' ' + endY;
+                    // Vertical segment
+                    if (goingDown) {
+                        path += ' L ' + stubStartX + ' ' + (endY - radius);
                     } else {
-                        path += ' Q ' + stubEndX + ' ' + endY + ' ' + stubEndX + ' ' + (endY + radius);
-                        path += ' L ' + stubEndX + ' ' + endY;
+                        path += ' L ' + stubStartX + ' ' + (endY + radius);
                     }
+                    
+                    // Second turn (from vertical to horizontal towards end stub)
+                    if (goingRight) {
+                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX + radius) + ' ' + endY;
+                    } else {
+                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX - radius) + ' ' + endY;
+                    }
+                    
+                    // Horizontal segment to end stub
+                    if (goingRight) {
+                        path += ' L ' + (stubEndX - radius) + ' ' + endY;
+                    } else {
+                        path += ' L ' + (stubEndX + radius) + ' ' + endY;
+                    }
+                    
+                    // Final turn at end stub point is not needed, continue straight
                 } else {
-                    // Same Y - straight horizontal line
-                    path += ' L ' + stubEndX + ' ' + endY;
+                    // If vertical distance is too small for curves, just draw straight horizontal line
+                    path += ' L ' + stubEndX + ' ' + startY;
                 }
                 
                 // Final horizontal stub to table edge
@@ -556,26 +607,32 @@ export class DbmlPreviewProvider {
                         const fromY = fromTableY + headerHeight + (fromFieldOffset * fieldHeight) + (fieldHeight / 2);
                         const toY = toTableY + headerHeight + (toFieldOffset * fieldHeight) + (fieldHeight / 2);
                         
-                        // Determine which side to connect based on relative position
-                        const fromCenterX = fromTableX + tableWidth / 2;
-                        const toCenterX = toTableX + tableWidth / 2;
-                        
                         // Connection stub length - distance from table edge before first turn
                         const stubLength = 40;
+                        
+                        // Use intelligent side selection
+                        const sides = calculateBestConnectionSides(
+                            fromTableX, fromY, tableWidth,
+                            toTableX, toY, tableWidth
+                        );
+                        
                         let fromX, toX, fromStubX, toStubX;
                         
-                        if (toCenterX > fromCenterX) {
-                            // Target is to the right
-                            fromX = fromTableX + tableWidth; // Exit point at right edge
-                            toX = toTableX; // Entry point at left edge
-                            fromStubX = fromX + stubLength; // Stub extends to the right
-                            toStubX = toX - stubLength; // Stub extends to the left
+                        // Set connection points based on calculated best sides
+                        if (sides.fromSide === 'right') {
+                            fromX = fromTableX + tableWidth;
+                            fromStubX = fromX + stubLength;
                         } else {
-                            // Target is to the left
-                            fromX = fromTableX; // Exit point at left edge
-                            toX = toTableX + tableWidth; // Entry point at right edge
-                            fromStubX = fromX - stubLength; // Stub extends to the left
-                            toStubX = toX + stubLength; // Stub extends to the right
+                            fromX = fromTableX;
+                            fromStubX = fromX - stubLength;
+                        }
+                        
+                        if (sides.toSide === 'right') {
+                            toX = toTableX + tableWidth;
+                            toStubX = toX + stubLength;
+                        } else {
+                            toX = toTableX;
+                            toStubX = toX - stubLength;
                         }
                         
                         const pathData = calculateOrthogonalPath(fromX, fromY, fromStubX, toX, toY, toStubX, 15);
