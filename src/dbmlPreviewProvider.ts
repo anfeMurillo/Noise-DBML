@@ -485,51 +485,46 @@ export class DbmlPreviewProvider {
                 }
             });
             
-            // Calculate orthogonal path with rounded corners
-            function calculateOrthogonalPath(x1, y1, x2, y2, radius) {
-                const startX = Math.round(x1 / gridSize) * gridSize;
-                const startY = Math.round(y1 / gridSize) * gridSize;
-                const endX = Math.round(x2 / gridSize) * gridSize;
-                const endY = Math.round(y2 / gridSize) * gridSize;
-                
-                const dx = endX - startX;
-                const dy = endY - startY;
-                
+            // Calculate orthogonal path with stub segments to prevent edge alignment
+            function calculateOrthogonalPath(startX, startY, stubStartX, endX, endY, stubEndX, radius) {
                 let path = 'M ' + startX + ' ' + startY;
                 
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    const midX = startX + dx / 2;
-                    
-                    if (dx > 0) {
-                        path += ' L ' + (midX - radius) + ' ' + startY;
-                        path += ' Q ' + midX + ' ' + startY + ' ' + midX + ' ' + (startY + (dy > 0 ? radius : -radius));
-                        path += ' L ' + midX + ' ' + (endY - (dy > 0 ? radius : -radius));
-                        path += ' Q ' + midX + ' ' + endY + ' ' + (midX + radius) + ' ' + endY;
-                        path += ' L ' + endX + ' ' + endY;
+                // First horizontal stub from table edge
+                path += ' L ' + stubStartX + ' ' + startY;
+                
+                const dy = endY - startY;
+                
+                // Create a three-segment path: horizontal -> vertical -> horizontal
+                if (dy !== 0) {
+                    // First turn at stub point
+                    if (dy > 0) {
+                        path += ' Q ' + stubStartX + ' ' + startY + ' ' + stubStartX + ' ' + (startY + radius);
+                        path += ' L ' + stubStartX + ' ' + (endY - radius);
+                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX + radius) + ' ' + endY;
                     } else {
-                        path += ' L ' + (midX + radius) + ' ' + startY;
-                        path += ' Q ' + midX + ' ' + startY + ' ' + midX + ' ' + (startY + (dy > 0 ? radius : -radius));
-                        path += ' L ' + midX + ' ' + (endY - (dy > 0 ? radius : -radius));
-                        path += ' Q ' + midX + ' ' + endY + ' ' + (midX - radius) + ' ' + endY;
-                        path += ' L ' + endX + ' ' + endY;
+                        path += ' Q ' + stubStartX + ' ' + startY + ' ' + stubStartX + ' ' + (startY - radius);
+                        path += ' L ' + stubStartX + ' ' + (endY + radius);
+                        path += ' Q ' + stubStartX + ' ' + endY + ' ' + (stubStartX + radius) + ' ' + endY;
+                    }
+                    
+                    // Horizontal to target stub
+                    path += ' L ' + (stubEndX - radius) + ' ' + endY;
+                    
+                    // Final turn to target stub
+                    if (dy > 0) {
+                        path += ' Q ' + stubEndX + ' ' + endY + ' ' + stubEndX + ' ' + (endY - radius);
+                        path += ' L ' + stubEndX + ' ' + endY;
+                    } else {
+                        path += ' Q ' + stubEndX + ' ' + endY + ' ' + stubEndX + ' ' + (endY + radius);
+                        path += ' L ' + stubEndX + ' ' + endY;
                     }
                 } else {
-                    const midY = startY + dy / 2;
-                    
-                    if (dy > 0) {
-                        path += ' L ' + startX + ' ' + (midY - radius);
-                        path += ' Q ' + startX + ' ' + midY + ' ' + (startX + (dx > 0 ? radius : -radius)) + ' ' + midY;
-                        path += ' L ' + (endX - (dx > 0 ? radius : -radius)) + ' ' + midY;
-                        path += ' Q ' + endX + ' ' + midY + ' ' + endX + ' ' + (midY + radius);
-                        path += ' L ' + endX + ' ' + endY;
-                    } else {
-                        path += ' L ' + startX + ' ' + (midY + radius);
-                        path += ' Q ' + startX + ' ' + midY + ' ' + (startX + (dx > 0 ? radius : -radius)) + ' ' + midY;
-                        path += ' L ' + (endX - (dx > 0 ? radius : -radius)) + ' ' + midY;
-                        path += ' Q ' + endX + ' ' + midY + ' ' + endX + ' ' + (midY - radius);
-                        path += ' L ' + endX + ' ' + endY;
-                    }
+                    // Same Y - straight horizontal line
+                    path += ' L ' + stubEndX + ' ' + endY;
                 }
+                
+                // Final horizontal stub to table edge
+                path += ' L ' + endX + ' ' + endY;
                 
                 return path;
             }
@@ -565,19 +560,25 @@ export class DbmlPreviewProvider {
                         const fromCenterX = fromTableX + tableWidth / 2;
                         const toCenterX = toTableX + tableWidth / 2;
                         
-                        let fromX, toX;
+                        // Connection stub length - distance from table edge before first turn
+                        const stubLength = 40;
+                        let fromX, toX, fromStubX, toStubX;
                         
                         if (toCenterX > fromCenterX) {
                             // Target is to the right
-                            fromX = fromTableX + tableWidth; // Exit from right
-                            toX = toTableX; // Enter from left
+                            fromX = fromTableX + tableWidth; // Exit point at right edge
+                            toX = toTableX; // Entry point at left edge
+                            fromStubX = fromX + stubLength; // Stub extends to the right
+                            toStubX = toX - stubLength; // Stub extends to the left
                         } else {
                             // Target is to the left
-                            fromX = fromTableX; // Exit from left
-                            toX = toTableX + tableWidth; // Enter from right
+                            fromX = fromTableX; // Exit point at left edge
+                            toX = toTableX + tableWidth; // Entry point at right edge
+                            fromStubX = fromX - stubLength; // Stub extends to the left
+                            toStubX = toX + stubLength; // Stub extends to the right
                         }
                         
-                        const pathData = calculateOrthogonalPath(fromX, fromY, toX, toY, 15);
+                        const pathData = calculateOrthogonalPath(fromX, fromY, fromStubX, toX, toY, toStubX, 15);
                         line.setAttribute('d', pathData);
                         
                         // Update cardinality label position

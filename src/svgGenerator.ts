@@ -29,60 +29,67 @@ export interface ParsedSchema {
 	refs: ParsedRef[];
 }
 
-// Calculate orthogonal path with rounded corners
-function calculateOrthogonalPath(x1: number, y1: number, x2: number, y2: number, gridSize: number, radius: number): string {
-	// Snap points to grid
-	const startX = Math.round(x1 / gridSize) * gridSize;
-	const startY = Math.round(y1 / gridSize) * gridSize;
-	const endX = Math.round(x2 / gridSize) * gridSize;
-	const endY = Math.round(y2 / gridSize) * gridSize;
-	
-	const dx = endX - startX;
-	const dy = endY - startY;
-	
-	// Start path
+// Calculate orthogonal path with stub segments to prevent edge alignment
+function calculateOrthogonalPath(startX: number, startY: number, stubStartX: number, endX: number, endY: number, stubEndX: number, gridSize: number, radius: number): string {
 	let path = `M ${startX} ${startY}`;
 	
-	// Simple orthogonal routing with rounded corners
-	if (Math.abs(dx) > Math.abs(dy)) {
-		// Horizontal first
-		const midX = startX + dx / 2;
+	// First horizontal stub from table edge
+	path += ` L ${stubStartX} ${startY}`;
+	
+	const dy = endY - startY;
+	const dx = stubEndX - stubStartX;
+	
+	// Create path with proper direction handling
+	if (dy !== 0) {
+		// Determine direction for proper radius application
+		const goingRight = dx > 0;
+		const goingDown = dy > 0;
 		
-		if (dx > 0) {
-			// Going right
-			path += ` L ${midX - radius} ${startY}`;
-			path += ` Q ${midX} ${startY} ${midX} ${startY + (dy > 0 ? radius : -radius)}`;
-			path += ` L ${midX} ${endY - (dy > 0 ? radius : -radius)}`;
-			path += ` Q ${midX} ${endY} ${midX + radius} ${endY}`;
-			path += ` L ${endX} ${endY}`;
+		// First turn at start stub point
+		if (goingDown) {
+			path += ` Q ${stubStartX} ${startY} ${stubStartX} ${startY + radius}`;
 		} else {
-			// Going left
-			path += ` L ${midX + radius} ${startY}`;
-			path += ` Q ${midX} ${startY} ${midX} ${startY + (dy > 0 ? radius : -radius)}`;
-			path += ` L ${midX} ${endY - (dy > 0 ? radius : -radius)}`;
-			path += ` Q ${midX} ${endY} ${midX - radius} ${endY}`;
-			path += ` L ${endX} ${endY}`;
+			path += ` Q ${stubStartX} ${startY} ${stubStartX} ${startY - radius}`;
+		}
+		
+		// Vertical segment
+		if (goingDown) {
+			path += ` L ${stubStartX} ${endY - radius}`;
+		} else {
+			path += ` L ${stubStartX} ${endY + radius}`;
+		}
+		
+		// Second turn (from vertical to horizontal towards end stub)
+		if (goingDown && goingRight) {
+			path += ` Q ${stubStartX} ${endY} ${stubStartX + radius} ${endY}`;
+		} else if (goingDown && !goingRight) {
+			path += ` Q ${stubStartX} ${endY} ${stubStartX - radius} ${endY}`;
+		} else if (!goingDown && goingRight) {
+			path += ` Q ${stubStartX} ${endY} ${stubStartX + radius} ${endY}`;
+		} else {
+			path += ` Q ${stubStartX} ${endY} ${stubStartX - radius} ${endY}`;
+		}
+		
+		// Horizontal segment to end stub
+		if (goingRight) {
+			path += ` L ${stubEndX - radius} ${endY}`;
+		} else {
+			path += ` L ${stubEndX + radius} ${endY}`;
+		}
+		
+		// Final turn at end stub point (no additional line needed)
+		if (goingRight) {
+			path += ` Q ${stubEndX} ${endY} ${stubEndX} ${endY}`;
+		} else {
+			path += ` Q ${stubEndX} ${endY} ${stubEndX} ${endY}`;
 		}
 	} else {
-		// Vertical first
-		const midY = startY + dy / 2;
-		
-		if (dy > 0) {
-			// Going down
-			path += ` L ${startX} ${midY - radius}`;
-			path += ` Q ${startX} ${midY} ${startX + (dx > 0 ? radius : -radius)} ${midY}`;
-			path += ` L ${endX - (dx > 0 ? radius : -radius)} ${midY}`;
-			path += ` Q ${endX} ${midY} ${endX} ${midY + radius}`;
-			path += ` L ${endX} ${endY}`;
-		} else {
-			// Going up
-			path += ` L ${startX} ${midY + radius}`;
-			path += ` Q ${startX} ${midY} ${startX + (dx > 0 ? radius : -radius)} ${midY}`;
-			path += ` L ${endX - (dx > 0 ? radius : -radius)} ${midY}`;
-			path += ` Q ${endX} ${midY} ${endX} ${midY - radius}`;
-			path += ` L ${endX} ${endY}`;
-		}
+		// Same Y - straight horizontal line
+		path += ` L ${stubEndX} ${endY}`;
 	}
+	
+	// Final horizontal stub to table edge
+	path += ` L ${endX} ${endY}`;
 	
 	return path;
 }
@@ -158,16 +165,24 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				const fromCenterX = fromPos.x + tableWidth / 2;
 				const toCenterX = toPos.x + tableWidth / 2;
 				
-				let fromX: number, toX: number;
+				// Connection stub length - distance from table edge before first turn
+				const stubLength = 40;
 				
-				// If target is to the right, exit from right side, enter from left
-				// If target is to the left, exit from left side, enter from right
+				let fromX: number, toX: number, fromStubX: number, toStubX: number;
+				
+				// Determine connection sides and create stub points
 				if (toCenterX > fromCenterX) {
-					fromX = fromPos.x + tableWidth; // Exit from right
-					toX = toPos.x; // Enter from left
+					// Target is to the right
+					fromX = fromPos.x + tableWidth; // Exit point at right edge
+					toX = toPos.x; // Entry point at left edge
+					fromStubX = fromX + stubLength; // Stub extends to the right
+					toStubX = toX - stubLength; // Stub extends to the left
 				} else {
-					fromX = fromPos.x; // Exit from left
-					toX = toPos.x + tableWidth; // Enter from right
+					// Target is to the left
+					fromX = fromPos.x; // Exit point at left edge
+					toX = toPos.x + tableWidth; // Entry point at right edge
+					fromStubX = fromX - stubLength; // Stub extends to the left
+					toStubX = toX + stubLength; // Stub extends to the right
 				}
 				
 				const fromY = fromFieldY;
@@ -180,8 +195,8 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				// Build cardinality label (e.g., "1:n", "1:1", "0:1")
 				let cardinalityLabel = `${fromRelation}:${toRelation}`;
 				
-				// Calculate orthogonal path with rounded corners
-				const pathData = calculateOrthogonalPath(fromX, fromY, toX, toY, gridSize, 15);
+				// Calculate orthogonal path with stub points to prevent edge alignment
+				const pathData = calculateOrthogonalPath(fromX, fromY, fromStubX, toX, toY, toStubX, gridSize, 15);
 				
 				// Calculate midpoint for label placement
 				const midX = (fromX + toX) / 2;
@@ -194,8 +209,10 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					data-to="${toEndpoint.tableName}"
 					data-from-x="${fromX}"
 					data-from-y="${fromY}"
+					data-from-stub-x="${fromStubX}"
 					data-to-x="${toX}"
 					data-to-y="${toY}"
+					data-to-stub-x="${toStubX}"
 					data-from-field-offset="${fromFieldIndex}"
 					data-to-field-offset="${toFieldIndex}"
 				/>`;
