@@ -787,30 +787,32 @@ export class DbmlPreviewProvider {
         }
 
         .diagram-views-panel {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            width: 280px;
-            max-height: calc(100% - 32px);
-            display: none;
+            position: fixed;
+            top: 0;
+            right: -320px;
+            width: 320px;
+            height: 100%;
+            display: flex;
             flex-direction: column;
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-widget-border);
-            border-radius: 6px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+            background: var(--vscode-sideBar-background);
+            border-left: 1px solid var(--vscode-panel-border);
+            box-shadow: -2px 0 12px rgba(0, 0, 0, 0.35);
             overflow: hidden;
-            z-index: 25;
+            z-index: 950;
+            transition: right 0.3s ease;
+            pointer-events: none;
         }
 
         .diagram-views-panel.open {
-            display: flex;
+            right: 0;
+            pointer-events: auto;
         }
 
         .diagram-views-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 14px;
+            padding: 16px 18px;
             background: var(--vscode-editorWidget-background);
             border-bottom: 1px solid var(--vscode-widget-border);
             font-weight: 500;
@@ -840,9 +842,10 @@ export class DbmlPreviewProvider {
         .diagram-views-body {
             display: flex;
             flex-direction: column;
-            padding: 12px 14px;
+            padding: 16px 18px;
             gap: 12px;
-            overflow: hidden;
+            overflow-y: auto;
+            flex: 1;
         }
 
         .diagram-views-select-row {
@@ -2102,6 +2105,8 @@ export class DbmlPreviewProvider {
                 directoryToggleBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     tableDirectory.classList.toggle('open');
+                    const isOpen = tableDirectory.classList.contains('open');
+                    directoryToggleBtn.classList.toggle('active', isOpen);
                 });
             }
             
@@ -2110,6 +2115,19 @@ export class DbmlPreviewProvider {
                 closeDirectoryBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     tableDirectory.classList.remove('open');
+                    directoryToggleBtn?.classList.remove('active');
+                });
+            }
+
+            // Close directory when clicking outside
+            if (tableDirectory && directoryToggleBtn) {
+                document.addEventListener('click', (event) => {
+                    if (!tableDirectory.contains(event.target) && !directoryToggleBtn.contains(event.target)) {
+                        if (tableDirectory.classList.contains('open')) {
+                            tableDirectory.classList.remove('open');
+                            directoryToggleBtn.classList.remove('active');
+                        }
+                    }
                 });
             }
             
