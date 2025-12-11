@@ -931,6 +931,28 @@ export class DbmlPreviewProvider {
             transition: all 0.2s ease;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
+
+        .toolbar-icon {
+            display: block;
+            width: 22px;
+            height: 22px;
+            pointer-events: none;
+            background-color: color-mix(in srgb, var(--vscode-button-background) 82%, white 18%);
+            mask-image: var(--toolbar-icon-image);
+            mask-repeat: no-repeat;
+            mask-position: center;
+            mask-size: contain;
+            -webkit-mask-image: var(--toolbar-icon-image);
+            -webkit-mask-repeat: no-repeat;
+            -webkit-mask-position: center;
+            -webkit-mask-size: contain;
+            transition: background-color 0.2s ease;
+        }
+
+        .toolbar-button.active .toolbar-icon,
+        .toolbar-button.directory-toggle.active .toolbar-icon {
+            background-color: color-mix(in srgb, var(--vscode-button-background) 55%, black 45%);
+        }
         
         .toolbar-button:hover {
             background: var(--vscode-list-hoverBackground);
@@ -1424,19 +1446,19 @@ export class DbmlPreviewProvider {
             </div>
             <div class="toolbar">
                 <button class="toolbar-button directory-toggle" id="directoryToggleBtn" title="Toggle table directory">
-                    <img src="${tableDirectoryIconUri}" alt="Tables" width="24" height="24" />
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${tableDirectoryIconUri}');"></span>
                 </button>
                 <button class="toolbar-button" id="diagramViewsToggleBtn" title="Toggle diagram views panel">
-                    <img src="${viewsIconUri}" alt="Views" width="24" height="24" />
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${viewsIconUri}');"></span>
                 </button>
                 <button class="toolbar-button" id="autoArrangeBtn" title="Auto arrange diagram">
-                    <img src="${magnetIconUri}" alt="Arrange" width="24" height="24" />
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${magnetIconUri}');"></span>
                 </button>
                 <button class="toolbar-button" id="gridToggleBtn" title="Toggle canvas grid">
-                    <img src="${gridIconUri}" alt="Grid" width="24" height="24" />
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${gridIconUri}');"></span>
                 </button>
                 <button class="toolbar-button" id="resetZoomBtn" title="Reset zoom and pan">
-                    <img src="${resetIconUri}" alt="Reset" width="24" height="24" />
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${resetIconUri}');"></span>
                 </button>
             </div>
         `}
