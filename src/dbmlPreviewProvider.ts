@@ -1155,21 +1155,21 @@ export class DbmlPreviewProvider {
             transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
         }
 
-        .diagram-views-button.primary {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border-color: var(--vscode-button-border, transparent);
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-        }
-
         .diagram-views-button:hover:not(:disabled) {
             background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
             border-color: var(--vscode-button-hoverBorder, var(--vscode-button-border, transparent));
         }
 
-        .diagram-views-button.primary:hover:not(:disabled) {
-            background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
-            color: var(--vscode-button-foreground);
+        .diagram-views-button.danger {
+            background: rgba(241, 76, 76, 0.18);
+            color: var(--vscode-errorForeground, #f14c4c);
+            border-color: rgba(241, 76, 76, 0.32);
+        }
+
+        .diagram-views-button.danger:hover:not(:disabled) {
+            background: rgba(241, 76, 76, 0.28);
+            color: var(--vscode-errorForeground, #f14c4c);
+            border-color: rgba(241, 76, 76, 0.45);
         }
 
         .diagram-views-button:disabled {
@@ -1381,12 +1381,11 @@ export class DbmlPreviewProvider {
                     </div>
                     <div class="diagram-views-actions">
                         <button class="diagram-views-button" id="diagramViewsRenameBtn" title="Rename view">Rename</button>
-                        <button class="diagram-views-button" id="diagramViewsDeleteBtn" title="Delete view">Delete</button>
                     </div>
                     <div class="diagram-views-table-list" id="diagramViewsTableList"></div>
                     <div class="diagram-views-footer">
                         <button class="diagram-views-button" id="diagramViewsShowAllBtn" title="Show all tables">Show all</button>
-                        <button class="diagram-views-button primary" id="diagramViewsSaveBtn" title="Save current view">Save</button>
+                        <button class="diagram-views-button danger" id="diagramViewsDeleteBtn" title="Delete view">Delete</button>
                     </div>
                     <div class="diagram-views-hint">Select which tables belong to the active view. Use Show all to reset the diagram.</div>
                 </div>
@@ -1398,7 +1397,17 @@ export class DbmlPreviewProvider {
                     <input class="diagram-views-modal-input" id="diagramViewsModalInput" type="text" autocomplete="off" spellcheck="false" />
                     <div class="diagram-views-modal-actions">
                         <button class="diagram-views-button" id="diagramViewsModalCancel">Cancelar</button>
-                        <button class="diagram-views-button primary" id="diagramViewsModalConfirm">Guardar</button>
+                        <button class="diagram-views-button" id="diagramViewsModalConfirm">Guardar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="diagram-views-modal-backdrop" id="diagramViewsDeleteModal" aria-hidden="true">
+                <div class="diagram-views-modal" role="dialog" aria-modal="true" aria-labelledby="diagramViewsDeleteTitle">
+                    <div class="diagram-views-modal-title" id="diagramViewsDeleteTitle">Eliminar vista</div>
+                    <div class="diagram-views-modal-description" id="diagramViewsDeleteDescription"></div>
+                    <div class="diagram-views-modal-actions">
+                        <button class="diagram-views-button" id="diagramViewsDeleteCancel">Cancelar</button>
+                        <button class="diagram-views-button danger" id="diagramViewsDeleteConfirm">Eliminar</button>
                     </div>
                 </div>
             </div>
@@ -1538,6 +1547,7 @@ export class DbmlPreviewProvider {
             }
             let pendingViewTables = new Set();
             let dismissNewViewModal = null;
+            let dismissDeleteViewModal = null;
             if (state.positions && typeof state.positions === 'object') {
                 positions = JSON.parse(JSON.stringify(state.positions));
             } else if (initialLayoutData.positions && typeof initialLayoutData.positions === 'object') {
@@ -1578,6 +1588,22 @@ export class DbmlPreviewProvider {
                     candidate = sanitized + ' ' + index;
                 }
                 return candidate;
+            }
+
+            function isDefaultView(view) {
+                if (!view || typeof view !== 'object') {
+                    return false;
+                }
+                if (typeof view.isDefault === 'boolean') {
+                    return view.isDefault;
+                }
+                if (typeof view.id === 'string') {
+                    const normalized = view.id.trim().toLowerCase();
+                    if (normalized === 'default' || normalized === '__default__' || normalized === '__all__') {
+                        return true;
+                    }
+                }
+                return false;
             }
 
             function requestNewViewName(defaultName, onConfirm) {
@@ -1653,6 +1679,71 @@ export class DbmlPreviewProvider {
                 diagramViewsModalInput.addEventListener('keydown', keyHandler);
 
                 dismissNewViewModal = cleanup;
+            }
+
+            function requestDeleteConfirmation(view, onConfirm) {
+                if (!view || typeof onConfirm !== 'function') {
+                    return;
+                }
+
+                const description = 'Se eliminara la vista "' + view.name + '". Esta accion no se puede deshacer.';
+
+                if (!diagramViewsDeleteModal || !diagramViewsDeleteDescription || !diagramViewsDeleteConfirm || !diagramViewsDeleteCancel) {
+                    if (confirm('Eliminar la vista "' + view.name + '"?')) {
+                        onConfirm();
+                    }
+                    return;
+                }
+
+                if (typeof dismissDeleteViewModal === 'function') {
+                    dismissDeleteViewModal();
+                }
+
+                diagramViewsDeleteDescription.textContent = description;
+                diagramViewsDeleteModal.classList.add('open');
+                diagramViewsDeleteModal.setAttribute('aria-hidden', 'false');
+
+                const cleanup = () => {
+                    diagramViewsDeleteModal.classList.remove('open');
+                    diagramViewsDeleteModal.setAttribute('aria-hidden', 'true');
+                    diagramViewsDeleteConfirm.removeEventListener('click', confirmHandler);
+                    diagramViewsDeleteCancel.removeEventListener('click', cancelHandler);
+                    diagramViewsDeleteModal.removeEventListener('pointerdown', backdropHandler);
+                    document.removeEventListener('keydown', keyHandler);
+                    dismissDeleteViewModal = null;
+                };
+
+                const confirmHandler = (event) => {
+                    event.preventDefault();
+                    cleanup();
+                    onConfirm();
+                };
+
+                const cancelHandler = (event) => {
+                    event.preventDefault();
+                    cleanup();
+                };
+
+                const backdropHandler = (event) => {
+                    if (event.target === diagramViewsDeleteModal) {
+                        cleanup();
+                    }
+                };
+
+                const keyHandler = (event) => {
+                    if (event.key === 'Enter') {
+                        confirmHandler(event);
+                    } else if (event.key === 'Escape') {
+                        cancelHandler(event);
+                    }
+                };
+
+                diagramViewsDeleteConfirm.addEventListener('click', confirmHandler);
+                diagramViewsDeleteCancel.addEventListener('click', cancelHandler);
+                diagramViewsDeleteModal.addEventListener('pointerdown', backdropHandler);
+                document.addEventListener('keydown', keyHandler);
+
+                dismissDeleteViewModal = cleanup;
             }
 
             function updateGridVisibility() {
@@ -3004,6 +3095,7 @@ export class DbmlPreviewProvider {
                             pendingViewTables.delete(tableName);
                         }
                         item.classList.toggle('selected', checkbox.checked);
+                        persistActiveViewTablesSnapshot();
                         if (typeof onToggle === 'function') {
                             onToggle();
                         }
@@ -3019,22 +3111,28 @@ export class DbmlPreviewProvider {
                 });
             }
 
+            function persistActiveViewTablesSnapshot() {
+                const activeView = getActiveView();
+                if (activeView) {
+                    activeView.tables = Array.from(pendingViewTables);
+                }
+                persistViewsAndScheduleSave();
+            }
+
             function updateDiagramViewsButtonState(buttons) {
                 if (!buttons) {
                     return;
                 }
                 const activeView = getActiveView();
                 const hasActive = Boolean(activeView);
-                const { renameBtn, deleteBtn, saveBtn } = buttons;
+                const canRenameOrDelete = hasActive && !isDefaultView(activeView);
+                const { renameBtn, deleteBtn } = buttons;
 
                 if (renameBtn) {
-                    renameBtn.disabled = !hasActive;
+                    renameBtn.disabled = !canRenameOrDelete;
                 }
                 if (deleteBtn) {
-                    deleteBtn.disabled = !hasActive;
-                }
-                if (saveBtn) {
-                    saveBtn.disabled = !hasActive;
+                    deleteBtn.disabled = !canRenameOrDelete;
                 }
             }
 
@@ -3082,11 +3180,14 @@ export class DbmlPreviewProvider {
             const diagramViewsDeleteBtn = document.getElementById('diagramViewsDeleteBtn');
             const diagramViewsTableList = document.getElementById('diagramViewsTableList');
             const diagramViewsShowAllBtn = document.getElementById('diagramViewsShowAllBtn');
-            const diagramViewsSaveBtn = document.getElementById('diagramViewsSaveBtn');
             const diagramViewsModal = document.getElementById('diagramViewsModal');
             const diagramViewsModalInput = document.getElementById('diagramViewsModalInput');
             const diagramViewsModalConfirm = document.getElementById('diagramViewsModalConfirm');
             const diagramViewsModalCancel = document.getElementById('diagramViewsModalCancel');
+            const diagramViewsDeleteModal = document.getElementById('diagramViewsDeleteModal');
+            const diagramViewsDeleteDescription = document.getElementById('diagramViewsDeleteDescription');
+            const diagramViewsDeleteConfirm = document.getElementById('diagramViewsDeleteConfirm');
+            const diagramViewsDeleteCancel = document.getElementById('diagramViewsDeleteCancel');
             
             // Initialize table directory
             initializeTableDirectory();
@@ -3176,8 +3277,7 @@ export class DbmlPreviewProvider {
             if (diagramViewsPanel && diagramViewsToggleBtn) {
                 const buttons = {
                     renameBtn: diagramViewsRenameBtn,
-                    deleteBtn: diagramViewsDeleteBtn,
-                    saveBtn: diagramViewsSaveBtn
+                    deleteBtn: diagramViewsDeleteBtn
                 };
 
                 const refreshUi = () => {
@@ -3200,6 +3300,9 @@ export class DbmlPreviewProvider {
                     diagramViewsToggleBtn.classList.remove('active');
                     if (typeof dismissNewViewModal === 'function') {
                         dismissNewViewModal();
+                    }
+                    if (typeof dismissDeleteViewModal === 'function') {
+                        dismissDeleteViewModal();
                     }
                 };
 
@@ -3275,7 +3378,7 @@ export class DbmlPreviewProvider {
                 if (diagramViewsRenameBtn) {
                     diagramViewsRenameBtn.addEventListener('click', () => {
                         const activeView = getActiveView();
-                        if (!activeView) {
+                        if (!activeView || isDefaultView(activeView)) {
                             return;
                         }
 
@@ -3293,21 +3396,18 @@ export class DbmlPreviewProvider {
                 if (diagramViewsDeleteBtn) {
                     diagramViewsDeleteBtn.addEventListener('click', () => {
                         const activeView = getActiveView();
-                        if (!activeView) {
+                        if (!activeView || isDefaultView(activeView)) {
                             return;
                         }
 
-                        const confirmed = confirm('Delete view "' + activeView.name + '"?');
-                        if (!confirmed) {
-                            return;
-                        }
-
-                        diagramViews = diagramViews.filter(view => view.id !== activeView.id);
-                        activeViewId = '';
-                        pendingViewTables = new Set(allTableNames);
-                        applyViewTables(allTableNames);
-                        persistViewsAndScheduleSave();
-                        refreshUi();
+                        requestDeleteConfirmation(activeView, () => {
+                            diagramViews = diagramViews.filter(view => view.id !== activeView.id);
+                            activeViewId = '';
+                            pendingViewTables = new Set(allTableNames);
+                            applyViewTables(allTableNames);
+                            persistViewsAndScheduleSave();
+                            refreshUi();
+                        });
                     });
                 }
 
@@ -3316,20 +3416,6 @@ export class DbmlPreviewProvider {
                         activeViewId = '';
                         pendingViewTables = new Set(allTableNames);
                         applyViewTables(allTableNames);
-                        persistViewsAndScheduleSave();
-                        refreshUi();
-                    });
-                }
-
-                if (diagramViewsSaveBtn) {
-                    diagramViewsSaveBtn.addEventListener('click', () => {
-                        const activeView = getActiveView();
-                        if (!activeView) {
-                            return;
-                        }
-
-                        activeView.tables = Array.from(pendingViewTables);
-                        applyViewTables(activeView.tables);
                         persistViewsAndScheduleSave();
                         refreshUi();
                     });
