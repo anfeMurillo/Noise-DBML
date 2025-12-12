@@ -2,6 +2,9 @@
 
 Visual Studio Code extension for previewing DBML (Database Markup Language) relational diagrams.
 
+![Example 1](media/example_1.png)
+![Example 2](media/example_2.png)
+
 ## Features
 
 - **Interactive Preview**: Pan, zoom, and drag tables.
