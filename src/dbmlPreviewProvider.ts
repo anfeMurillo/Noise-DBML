@@ -671,7 +671,7 @@ export class DbmlPreviewProvider {
             const tableNote = table.note ? this.parseMarkdown(table.note) : '';
 
             tablesHtml += `
-                <div class="table-section">
+                <div class="table-section" id="table-${table.name}">
                     <h2>${table.name}</h2>
                     <div class="table-note">${tableNote}</div>
                     <table>
@@ -1008,6 +1008,7 @@ export class DbmlPreviewProvider {
             border: 1px solid var(--table-border);
             border-radius: 8px;
             padding: 1.5rem;
+            scroll-margin-top: 2rem;
         }
 
         table {
@@ -1129,6 +1130,27 @@ export class DbmlPreviewProvider {
                     });
                 });
             }
+
+            // Handle table links to center the element
+            const tableLinks = document.querySelectorAll('.table-link');
+            tableLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const href = link.getAttribute('href');
+                    if (href && href.includes('#')) {
+                        const targetId = href.split('#')[1];
+                        const targetElement = document.getElementById(targetId);
+                        if (targetElement) {
+                            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            // Update URL without jumping
+                            history.pushState(null, null, href);
+                        } else {
+                            // If element is not on this page (e.g. different schema), navigate normally
+                            window.location.href = href;
+                        }
+                    }
+                });
+            });
         });
     </script>
 </head>
@@ -3761,6 +3783,28 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                 });
             }
             
+            function centerOnTable(tableName) {
+                const table = tableLookup.get(tableName);
+                if (!table) {
+                    return;
+                }
+                const x = parseFloat(table.getAttribute('data-x') || '0');
+                const y = parseFloat(table.getAttribute('data-y') || '0');
+                const width = parseFloat(table.getAttribute('data-width') || '250');
+                const height = getTableHeight(table);
+
+                const centerX = x + width / 2;
+                const centerY = y + height / 2;
+
+                viewBox.x = centerX - viewBox.width / 2;
+                viewBox.y = centerY - viewBox.height / 2;
+
+                svg.setAttribute('viewBox', viewBox.x + ' ' + viewBox.y + ' ' + viewBox.width + ' ' + viewBox.height);
+                updateGridAppearance();
+                persistState();
+                scheduleLayoutSave();
+            }
+
             // Initialize table directory
             function initializeTableDirectory() {
                 const tableDirectory = document.getElementById('tableDirectory');
@@ -3791,6 +3835,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
                         selectTable(tableName);
+                        centerOnTable(tableName);
                     });
                     
                     tableDirectoryContent.appendChild(item);
