@@ -37,6 +37,7 @@ const GROUP_COLOR_MAP: Record<string, string> = {
 export class DbmlPreviewProvider {
 	private panel: vscode.WebviewPanel | undefined;
 	private currentDocument: vscode.TextDocument | undefined;
+    private lastValidSvgContent: string = '';
 
 	constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -1250,9 +1251,17 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
 		
 		// Generate SVG from schema
 		svgContent = generateSvgFromSchema(schema);
+        this.lastValidSvgContent = svgContent;
 	} catch (error) {
 		errorMessage = error instanceof Error ? error.message : 'Unknown error parsing DBML';
 		console.error('DBML Parse Error:', error);
+
+        vscode.window.showErrorMessage('DBML Syntax Error: ' + errorMessage);
+
+        if (this.lastValidSvgContent) {
+            svgContent = this.lastValidSvgContent;
+            errorMessage = '';
+        }
 	}
 
         const webview = this.panel?.webview;
