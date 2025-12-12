@@ -3633,23 +3633,24 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                     const svgClone = svg.cloneNode(true);
                     
                     // Collect styles
-                    const computedStyle = getComputedStyle(document.body);
-                    const rootStyle = getComputedStyle(document.documentElement);
+                    const compStyle = window.getComputedStyle(document.body);
+                    const rootStyle = window.getComputedStyle(document.documentElement);
                     
-                    const getVar = (name, fallback) => {
-                        let val = computedStyle.getPropertyValue(name);
+                    function getStyle(prop) {
+                        let val = compStyle.getPropertyValue(prop);
                         if (!val || val.trim() === '') {
-                             val = rootStyle.getPropertyValue(name);
+                             val = rootStyle.getPropertyValue(prop);
                         }
-                        return (val && val.trim() !== '') ? val : fallback;
-                    };
+                        return (val && val.trim() !== '') ? val : '';
+                    }
 
                     let cssVariables = '';
                     // Iterate over all properties to find CSS variables
-                    for (let i = 0; i < computedStyle.length; i++) {
-                        const key = computedStyle[i];
+                    for (let i = 0; i < compStyle.length; i++) {
+                        const key = compStyle[i];
                         if (key.startsWith('--')) {
-                            cssVariables += \`\${key}: \${computedStyle.getPropertyValue(key)};\\n\`;
+                            const val = compStyle.getPropertyValue(key);
+                            cssVariables += \`\${key}: \${val};\\n\`;
                         }
                     }
                     
@@ -3665,10 +3666,10 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                         }
                     }
                     
-                    const bgColor = getVar('--vscode-editor-background', '#1e1e1e');
-                    const fgColor = getVar('--vscode-editor-foreground', '#cccccc');
-                    const btnBg = getVar('--vscode-button-background', '#0e639c');
-                    const btnFg = getVar('--vscode-button-foreground', '#ffffff');
+                    const bgColor = getStyle('--vscode-editor-background') || '#1e1e1e';
+                    const fgColor = getStyle('--vscode-editor-foreground') || '#cccccc';
+                    const btnBg = getStyle('--vscode-button-background') || '#0e639c';
+                    const btnFg = getStyle('--vscode-button-foreground') || '#ffffff';
 
                     const style = document.createElement('style');
                     style.textContent = \`
