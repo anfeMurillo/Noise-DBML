@@ -1,35 +1,69 @@
 # NOISE DBML
 
-NOISE DBML renders Database Markup Language diagrams directly inside Visual Studio Code using an interactive webview.
+Visual Studio Code extension for previewing DBML (Database Markup Language) relational diagrams.
 
-## Highlights
+## Features
 
-- Preview DBML files with pan, zoom, and an adaptive grid.
-- Persist custom layouts, zoom level, and grid settings per document.
-- Save filtered diagram views for quick context switching.
-- Theme-aware styling that matches the editor.
+- **Interactive Preview**: Pan, zoom, and drag tables.
+- **Theme Support**: Automatically adapts to VS Code color themes.
+- **Layout Persistence**: Saves your diagram layout and positions.
 
-## Getting Started
+## Syntax Guide
 
-1. Install NOISE DBML from the VS Code Marketplace.
-2. Open a `.dbml` file.
-3. Click the eye icon in the editor toolbar or run **DBML: Open Preview**.
+### Groups
 
-## Command
+You can group related tables using the `TableGroup` syntax. Groups are visualized with a colored background.
 
-- **DBML: Open Preview** (`noise-dbml.openPreview`)
+```dbml
+TableGroup user_management {
+  users
+  follows
+  // You can add a color or note
+  note: "Core user tables"
+}
+```
 
-## Requirements
+### Allowed Syntax
 
-- Visual Studio Code 1.107.0 or newer
-- DBML files that follow the official [DBML specification](https://www.dbml.org/home/)
+The following syntax is fully supported and recommended for defining tables and relationships:
 
-## Development
+```dbml
+Table follows {
+  following_user_id integer
+  followed_user_id integer
+  created_at timestamp
+}
 
-1. `npm install`
-2. `npm run compile`
-3. Press `F5` to launch the extension development host
-4. `npm test` to execute automated tests
+Table users {
+  id integer [primary key]
+  username varchar
+  role varchar
+  created_at timestamp
+}
+
+Table posts {
+  id integer [primary key]
+  title varchar
+  body text [note: 'Content of the post']
+  user_id integer [not null]
+  status varchar
+  created_at timestamp
+}
+
+Ref user_posts: posts.user_id > users.id // many-to-one
+
+Ref: users.id <> follows.following_user_id
+
+Ref: users.id <> follows.followed_user_id
+```
+
+### Not Allowed / Unsupported Syntax
+
+The following DBML features are currently **not supported** or will not be rendered in the diagram:
+
+- **Enums**: `Enum` definitions are parsed but not currently visualized.
+- **Project Information**: `Project` blocks are ignored.
+- **Complex Reference Settings**: While parsed, settings like `[delete: cascade]` or `[update: no action]` are only visible in tooltips and do not change the line style.
 
 ## Support
 

@@ -1,0 +1,233 @@
+{
+  "scopeName": "source.dbml",
+  "name": "DBML",
+  "fileTypes": ["dbml"],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#refStatements"
+    },
+    {
+      "include": "#blockKeywords"
+    },
+    {
+      "include": "#fieldDefinitions"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.dbml",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.dbml",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.backtick.dbml",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "constant.character.escape.dbml",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.dbml",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.dbml",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.dbml",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.dbml",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "blockKeywords": {
+      "patterns": [
+        {
+          "name": "meta.block.table.dbml",
+          "begin": "\\b(Table|Enum|TableGroup|Project|Indexes|Index)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.dbml"
+            }
+          },
+          "end": "(?=\\{)",
+          "patterns": [
+            {
+              "name": "entity.name.type.dbml",
+              "match": "[A-Za-z_][A-Za-z0-9_]*"
+            },
+            {
+              "name": "punctuation.definition.parameters.begin.dbml",
+              "match": "\\("
+            },
+            {
+              "name": "punctuation.definition.parameters.end.dbml",
+              "match": "\\)"
+            },
+            {
+              "name": "punctuation.separator.key-value.dbml",
+              "match": ","
+            }
+          ]
+        }
+      ]
+    },
+    "refStatements": {
+      "patterns": [
+        {
+          "name": "meta.reference.dbml",
+          "begin": "^\\s*(Ref)\\s*:",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.dbml"
+            }
+          },
+          "end": "(?=\\r?\\n|$)",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#attributes"
+            },
+            {
+              "name": "keyword.operator.relationship.dbml",
+              "match": "(<>|>|<|-)"
+            },
+            {
+              "name": "variable.other.property.dbml",
+              "match": "[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*"
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.dbml",
+          "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+    "fieldDefinitions": {
+      "patterns": [
+        {
+          "name": "meta.field.dbml",
+          "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s*\\(([^)]*)\\))?",
+          "captures": {
+            "1": {
+              "name": "variable.other.property.dbml"
+            },
+            "2": {
+              "name": "support.type.primitive.dbml"
+            },
+            "3": {
+              "name": "constant.numeric.dbml"
+            }
+          }
+        }
+      ]
+    },
+
+    "attributes": {
+      "patterns": [
+        {
+          "name": "meta.attribute.dbml",
+          "begin": "\\[",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.attribute.begin.dbml"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.attribute.end.dbml"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "keyword.operator.relationship.dbml",
+              "match": "(<>|>|<)"
+            },
+            {
+              "name": "keyword.other.dbml",
+              "match": "\\b(primary key|not null|set null|set default|no action|pk|increment|unique|null|default|nullable|ref|delete|cascade|restrict)\\b"
+            },
+            {
+              "name": "variable.other.property.dbml",
+              "match": "[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*"
+            },
+            {
+              "name": "entity.other.attribute-name.dbml",
+              "match": "[A-Za-z_][A-Za-z0-9_]*"
+            },
+            {
+              "name": "punctuation.separator.attribute.dbml",
+              "match": ","
+            },
+            {
+              "name": "keyword.operator.assignment.dbml",
+              "match": ":"
+            },
+            {
+              "include": "#numbers"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.dbml",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.dbml",
+          "match": "\\b(null)\\b"
+        }
+      ]
+    }
+  }
+}

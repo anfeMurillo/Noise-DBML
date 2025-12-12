@@ -15,6 +15,7 @@ export interface ParsedField {
 }
 
 export interface ParsedRef {
+	name?: string;
 	endpoints: Array<{
 		tableName: string;
 		fieldNames: string[];
@@ -386,6 +387,19 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					tableWidth
 				);
 				
+				let tooltipText = '';
+				if (ref.name) {
+					tooltipText += `Name: ${escapeXml(ref.name)}\n`;
+				}
+				if (ref.onDelete) {
+					tooltipText += `On Delete: ${escapeXml(ref.onDelete)}\n`;
+				}
+				if (ref.onUpdate) {
+					tooltipText += `On Update: ${escapeXml(ref.onUpdate)}\n`;
+				}
+				tooltipText = tooltipText.trim();
+
+				svg += `<g class="relationship">`;
 				svg += `<path 
 					d="${pathData}"
 					class="relationship-line" 
@@ -403,7 +417,14 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					data-to-side="${sides.toSide}"
 					marker-start="${markerStart}"
 					marker-end="${markerEnd}"
-				/>`;
+				>`;
+				
+				if (tooltipText) {
+					svg += `<title>${tooltipText}</title>`;
+				}
+				
+				svg += `</path>`;
+				svg += `</g>`;
 			}
 		}
 	});

@@ -439,72 +439,76 @@ export class DbmlPreviewProvider {
 				});
 			}
 
-			// Extract references
-			if (schema.refs) {
-				schema.refs.forEach((ref: any) => {
-					const endpoints = (ref.endpoints || []).map((ep: any) => ({
-						tableName: ep.tableName || '',
-						fieldNames: ep.fieldNames || [],
-						relation: ep.relation || '1'
-					}));
-					
+		// Extract references
+		if (schema.refs) {
+			schema.refs.forEach((ref: any) => {
+				const endpoints = (ref.endpoints || []).map((ep: any) => ({
+					tableName: ep.tableName || '',
+					fieldNames: ep.fieldNames || [],
+					relation: ep.relation || '1'
+				}));
+				
+				// Only add references with at least 2 valid endpoints
+				if (endpoints.length >= 2 && endpoints[0].tableName && endpoints[1].tableName) {
 					const parsedRef: ParsedRef = {
+						name: ref.name || undefined,
 						endpoints: endpoints,
 						onDelete: ref.onDelete || undefined,
 						onUpdate: ref.onUpdate || undefined
 					};
 					refs.push(parsedRef);
-				});
-			}
-
-            if (schema.tableGroups) {
-                schema.tableGroups.forEach((group: any) => {
-                    const groupName = group.name || '';
-                    const tablesInGroup = (group.tables || []).map((table: any) => table?.name || table?.tableName || '').filter((name: string) => name.length > 0);
-                    const metadata = metadataLookup.get(groupName);
-                    groups.push({
-                        name: groupName,
-                        tables: tablesInGroup,
-                        color: metadata?.color,
-                        note: metadata?.note
-                    });
-                });
-            }
+				}
+			});
 		}
 
-        // Include metadata-defined groups that parser did not return (e.g., empty groups)
-        metadataGroups.forEach(group => {
-            if (!groups.some(existing => existing.name === group.name)) {
-                groups.push({
-                    name: group.name,
-                    tables: group.tables,
-                    color: group.color,
-                    note: group.note
-                });
-            }
-        });
-
-        return { tables, refs, groups };
+		if (schema.tableGroups) {
+			schema.tableGroups.forEach((group: any) => {
+				const groupName = group.name || '';
+				const tablesInGroup = (group.tables || []).map((table: any) => table?.name || table?.tableName || '').filter((name: string) => name.length > 0);
+				const metadata = metadataLookup.get(groupName);
+				groups.push({
+					name: groupName,
+					tables: tablesInGroup,
+					color: metadata?.color,
+					note: metadata?.note
+				});
+			});
+		}
 	}
 
-    private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): string {
-		let svgContent = '';
-		let errorMessage = '';
-
-		try {
-			// Parse DBML
-			// @ts-ignore - @dbml/core types are incomplete
-            const database = Parser.parse(sanitizedDbml, 'dbml');
-			
-			// Convert parsed database to our schema format
-            const schema = this.convertToSchema(database, groupMetadata);
-			
-			// Generate SVG from schema
-			svgContent = generateSvgFromSchema(schema);
-		} catch (error) {
-			errorMessage = error instanceof Error ? error.message : 'Unknown error parsing DBML';
-			console.error('DBML Parse Error:', error);
+	// Include metadata-defined groups that parser did not return (e.g., empty groups)
+	metadataGroups.forEach(group => {
+		if (!groups.some(existing => existing.name === group.name)) {
+			groups.push({
+				name: group.name,
+				tables: group.tables,
+				color: group.color,
+				note: group.note
+			});
 		}
+	});
+
+	return { tables, refs, groups };
+}
+
+private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): string {
+	let svgContent = '';
+	let errorMessage = '';
+
+	try {
+		// Parse DBML
+		// @ts-ignore - @dbml/core types are incomplete
+		const database = Parser.parse(sanitizedDbml, 'dbml');
+		
+		// Convert parsed database to our schema format
+		const schema = this.convertToSchema(database, groupMetadata);
+		
+		// Generate SVG from schema
+		svgContent = generateSvgFromSchema(schema);
+	} catch (error) {
+		errorMessage = error instanceof Error ? error.message : 'Unknown error parsing DBML';
+		console.error('DBML Parse Error:', error);
+	}
 
         const webview = this.panel?.webview;
         if (!webview) {
