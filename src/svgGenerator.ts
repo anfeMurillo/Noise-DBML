@@ -179,7 +179,7 @@ function calculateOrthogonalPath(
 }
 
 export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<string, {x: number, y: number}>): string {
-	const tableWidth = 250;
+	const tableWidth = 380;
 	const fieldHeight = 30;
 	const headerHeight = 40;
 	const tableSpacing = 100;
@@ -505,7 +505,11 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		svg += `<rect width="${tableWidth}" height="${tableHeight}" class="table-border" rx="5" ry="5" fill="none" />`;
 		
 		// Header text
-		svg += `<text x="${tableWidth / 2}" y="${headerHeight / 2 + 5}" class="table-name" text-anchor="middle" font-weight="bold" font-size="16">${safeTableName}</text>`;
+		const maxHeaderChars = 40;
+		const safeTableNameDisplay = safeTableName.length > maxHeaderChars 
+			? safeTableName.substring(0, maxHeaderChars - 1) + '…' 
+			: safeTableName;
+		svg += `<text x="${tableWidth / 2}" y="${headerHeight / 2 + 5}" class="table-name" text-anchor="middle" font-weight="bold" font-size="16">${safeTableNameDisplay}</text>`;
 		
 		// Fields
 		table.fields.forEach((field, index) => {
@@ -521,7 +525,11 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			
 			// Field name
 			const fieldLabelRaw = field.name;
-			const fieldLabel = escapeXml(fieldLabelRaw);
+			const maxNameChars = 30;
+			const fieldLabelDisplay = fieldLabelRaw.length > maxNameChars 
+				? fieldLabelRaw.substring(0, maxNameChars - 1) + '…' 
+				: fieldLabelRaw;
+			const fieldLabel = escapeXml(fieldLabelDisplay);
 			let badges = '';
 			
 			if (field.unique) {
@@ -536,8 +544,8 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			// Icons after field name
 			const iconSize = 20;
 			const iconY = fieldY + (fieldHeight - iconSize) / 2;
-			const textWidth = fieldLabelRaw.length * 5.5;
-			let iconX = 12 + textWidth + 4;
+			// Fixed position for icons to normalize distance
+			let iconX = 200;
 			
 			// PK icon if this field is a primary key
 			if (field.pk) {
