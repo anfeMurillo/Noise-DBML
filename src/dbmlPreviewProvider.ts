@@ -95,6 +95,8 @@ export class DbmlPreviewProvider {
                     } catch (error) {
                         console.error('Failed to save DBML layout data:', error);
                     }
+                } else if (message.type === 'generateDocs') {
+                    await this.generateDocumentation();
                 }
             });
 
@@ -491,6 +493,160 @@ export class DbmlPreviewProvider {
 	return { tables, refs, groups };
 }
 
+    private async generateDocumentation(): Promise<void> {
+        if (!this.currentDocument) {
+            vscode.window.showErrorMessage('No active DBML document found.');
+            return;
+        }
+
+        const dbmlContent = this.currentDocument.getText();
+        let database;
+        try {
+             // @ts-ignore
+             database = Parser.parse(dbmlContent, 'dbml');
+        } catch (e) {
+            vscode.window.showErrorMessage('Failed to parse DBML: ' + e);
+            return;
+        }
+
+        const docPath = path.join(path.dirname(this.currentDocument.uri.fsPath), 'docs');
+        
+        try {
+            await fs.mkdir(docPath, { recursive: true });
+        } catch (e) {
+            vscode.window.showErrorMessage('Failed to create docs folder: ' + e);
+            return;
+        }
+
+        // Generate HTML content
+        const htmlContent = this.generateDocsHtml(database);
+        
+        try {
+            await fs.writeFile(path.join(docPath, 'index.html'), htmlContent);
+            vscode.window.showInformationMessage('Documentation generated successfully in ' + docPath);
+        } catch (e) {
+            vscode.window.showErrorMessage('Failed to write documentation file: ' + e);
+        }
+    }
+
+    private generateDocsHtml(database: any): string {
+        const schema = this.convertToSchema(database, []);
+        const tables = schema.tables;
+        
+        let tablesHtml = '';
+        tables.forEach(table => {
+            let fieldsHtml = '';
+            table.fields.forEach(field => {
+                fieldsHtml += `
+                    <tr>
+                        <td>${field.name}</td>
+                        <td>${field.type}</td>
+                        <td>${field.pk ? 'PK' : ''}</td>
+                        <td>${field.note || ''}</td>
+                    </tr>
+                `;
+            });
+
+            tablesHtml += `
+                <div class="table-section">
+                    <h2>${table.name}</h2>
+                    <p>${table.note || ''}</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Attributes</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${fieldsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        });
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Documentation</title>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --table-border: #e0e0e0;
+            --table-header-bg: #f5f5f5;
+            --code-bg: #f8f8f8;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1e1e1e;
+                --text-color: #d4d4d4;
+                --table-border: #333333;
+                --table-header-bg: #2d2d2d;
+                --code-bg: #2d2d2d;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        h1, h2, h3 {
+            color: var(--text-color);
+        }
+
+        .table-section {
+            margin-bottom: 3rem;
+            border: 1px solid var(--table-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--table-border);
+        }
+
+        th {
+            background-color: var(--table-header-bg);
+            font-weight: 600;
+        }
+
+        code {
+            background-color: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Database Documentation</h1>
+    ${tablesHtml}
+</body>
+</html>`;
+    }
+
 private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): string {
 	let svgContent = '';
 	let errorMessage = '';
@@ -520,6 +676,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
         const gridIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'frame-svgrepo-com.svg')).toString();
         const magnetIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'switch-svgrepo-com.svg')).toString();
         const resetIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'drag-svgrepo-com.svg')).toString();
+        const docsIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'book.svg')).toString();
 
         const layoutJson = JSON.stringify(layoutData ?? {}).replace(/</g, '\u003c');
         const groupsJson = JSON.stringify(groupMetadata ?? []).replace(/</g, '\u003c');
@@ -1463,6 +1620,9 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                 </button>
                 <button class="toolbar-button" id="resetZoomBtn" title="Reset zoom and pan">
                     <span class="toolbar-icon" style="--toolbar-icon-image: url('${resetIconUri}');"></span>
+                </button>
+                <button class="toolbar-button" id="generateDocsBtn" title="Generate Documentation">
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${docsIconUri}');"></span>
                 </button>
             </div>
         `}
@@ -3298,6 +3458,16 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                     svg.setAttribute('viewBox', '0 0 2000 2000');
                     updateGridAppearance();
                     persistViewsAndScheduleSave();
+                });
+            }
+
+            const generateDocsBtn = document.getElementById('generateDocsBtn');
+            if (generateDocsBtn) {
+                generateDocsBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    vscode.postMessage({
+                        type: 'generateDocs'
+                    });
                 });
             }
 
