@@ -533,6 +533,19 @@ export class DbmlPreviewProvider {
         const schema = this.convertToSchema(database, []);
         const tables = schema.tables;
         
+        // Project Info
+        const projectName = database.name || 'Database Documentation';
+        const projectType = database.databaseType || '';
+        const projectNote = database.note ? this.parseMarkdown(database.note) : '';
+
+        let projectHtml = `
+            <div class="project-section">
+                <h1>${projectName}</h1>
+                ${projectType ? `<div class="badge">${projectType}</div>` : ''}
+                <div class="project-note">${projectNote}</div>
+            </div>
+        `;
+
         let tablesHtml = '';
         tables.forEach(table => {
             let fieldsHtml = '';
@@ -547,10 +560,12 @@ export class DbmlPreviewProvider {
                 `;
             });
 
+            const tableNote = table.note ? this.parseMarkdown(table.note) : '';
+
             tablesHtml += `
                 <div class="table-section">
                     <h2>${table.name}</h2>
-                    <p>${table.note || ''}</p>
+                    <div class="table-note">${tableNote}</div>
                     <table>
                         <thead>
                             <tr>
@@ -573,7 +588,7 @@ export class DbmlPreviewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Database Documentation</title>
+    <title>${projectName} - Documentation</title>
     <style>
         :root {
             --bg-color: #ffffff;
@@ -581,6 +596,7 @@ export class DbmlPreviewProvider {
             --table-border: #e0e0e0;
             --table-header-bg: #f5f5f5;
             --code-bg: #f8f8f8;
+            --link-color: #007acc;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -590,6 +606,7 @@ export class DbmlPreviewProvider {
                 --table-border: #333333;
                 --table-header-bg: #2d2d2d;
                 --code-bg: #2d2d2d;
+                --link-color: #3794ff;
             }
         }
 
@@ -605,6 +622,47 @@ export class DbmlPreviewProvider {
 
         h1, h2, h3 {
             color: var(--text-color);
+            margin-top: 0;
+        }
+
+        a {
+            color: var(--link-color);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .project-section {
+            margin-bottom: 4rem;
+            border-bottom: 2px solid var(--table-border);
+            padding-bottom: 2rem;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background-color: var(--table-header-bg);
+            border-radius: 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            border: 1px solid var(--table-border);
+        }
+
+        .project-note, .table-note {
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .project-note h1, .project-note h2, .project-note h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .project-note ul, .table-note ul {
+            padding-left: 1.5rem;
         }
 
         .table-section {
@@ -641,10 +699,81 @@ export class DbmlPreviewProvider {
     </style>
 </head>
 <body>
-    <h1>Database Documentation</h1>
+    ${projectHtml}
     ${tablesHtml}
 </body>
 </html>`;
+    }
+
+    private parseMarkdown(text: string): string {
+        if (!text) return '';
+
+        const lines = text.split('\n');
+        let html = '';
+        let inList = false;
+
+        for (let line of lines) {
+            // Escape HTML
+            line = line
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Headers
+            if (line.trim().startsWith('# ')) {
+                if (inList) { html += '</ul>\n'; inList = false; }
+                html += `<h1>${line.trim().substring(2)}</h1>\n`;
+                continue;
+            }
+            if (line.trim().startsWith('## ')) {
+                if (inList) { html += '</ul>\n'; inList = false; }
+                html += `<h2>${line.trim().substring(3)}</h2>\n`;
+                continue;
+            }
+            if (line.trim().startsWith('### ')) {
+                if (inList) { html += '</ul>\n'; inList = false; }
+                html += `<h3>${line.trim().substring(4)}</h3>\n`;
+                continue;
+            }
+
+            // List items
+            if (line.trim().startsWith('- ')) {
+                if (!inList) {
+                    html += '<ul>\n';
+                    inList = true;
+                }
+                let content = line.trim().substring(2);
+                // Inline formatting
+                content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                html += `<li>${content}</li>\n`;
+                continue;
+            }
+
+            // End list if not a list item
+            if (inList) {
+                html += '</ul>\n';
+                inList = false;
+            }
+
+            // Paragraphs / Text
+            if (line.trim() === '') {
+                // html += '<br>\n'; 
+                // Don't add excessive brs, maybe just ignore empty lines or treat as paragraph separators?
+                // For simplicity, let's treat non-empty lines as paragraphs if they aren't headers/lists
+            } else {
+                // Inline formatting
+                line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                line = line.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                html += `<p>${line}</p>\n`;
+            }
+        }
+
+        if (inList) {
+            html += '</ul>\n';
+        }
+
+        return html;
     }
 
 private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): string {
