@@ -465,7 +465,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		// Clip path for rounded corners only on outer edges
 		svg += `<defs>`;
 		svg += `<clipPath id="clip-${clipSafeId}">`;
-		svg += `<rect width="${tableWidth}" height="${tableHeight}" rx="8" ry="8" />`;
+		svg += `<rect width="${tableWidth}" height="${tableHeight}" rx="5" ry="5" />`;
 		svg += `</clipPath>`;
 		svg += `</defs>`;
 		
@@ -481,7 +481,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		svg += `</g>`;
 		
 		// Outer border with rounded corners
-		svg += `<rect width="${tableWidth}" height="${tableHeight}" class="table-border" rx="8" ry="8" fill="none" />`;
+		svg += `<rect width="${tableWidth}" height="${tableHeight}" class="table-border" rx="5" ry="5" fill="none" />`;
 		
 		// Header text
 		svg += `<text x="${tableWidth / 2}" y="${headerHeight / 2 + 5}" class="table-name" text-anchor="middle" font-weight="bold" font-size="16">${safeTableName}</text>`;
