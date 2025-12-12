@@ -7,15 +7,33 @@ Visual Studio Code extension for previewing DBML (Database Markup Language) rela
 
 ## Features
 
-- **Interactive Preview**: Pan, zoom, and drag tables.
-- **Theme Support**: Automatically adapts to VS Code color themes.
-- **Layout Persistence**: Saves your diagram layout and positions.
+### 📊 Interactive Preview
+- **Visual Diagram**: Render your DBML code as an interactive entity-relationship diagram.
+- **Interactive Controls**: Pan, zoom, and drag tables to organize your view.
+- **Layout Persistence**: The extension remembers your table positions and layout even after you close VS Code.
+- **Theme Adaptation**: Automatically adapts to your VS Code color theme (Light/Dark/High Contrast).
+
+### 🔍 Diagram Views
+- **Create Views**: Create specific views to focus on a subset of tables.
+- **Manage Views**: Rename or delete views as needed.
+- **Filter Tables**: Select which tables to show in each view for better clarity in large schemas.
+
+### 📝 Documentation & Export
+- **Documentation Generation**: Generate Markdown documentation for your database schema directly from the preview.
+- **Tooltips**: Hover over fields to see their notes/comments.
+
+### ⚡ Productivity Snippets
+Speed up your workflow with built-in snippets:
+- `table`: Create a new table with ID and sample column.
+- `group`: Create a TableGroup.
+- `project`: Create a Project definition.
+- `enum`: Create an Enum definition.
+- `indexes`: Create an Indexes block.
 
 ## Syntax Guide
 
 ### Groups
-
-You can group related tables using the `TableGroup` syntax. Groups are visualized with a colored background.
+Group related tables using `TableGroup`. Groups are visualized with a colored background.
 
 ```dbml
 TableGroup user_management {
@@ -27,77 +45,54 @@ TableGroup user_management {
 ```
 
 ### Schemas
-
-You can organize your tables into schemas using the `note` property on a table. Add `schema: your_schema_name` to the table note.
+Organize tables into schemas using the `note` property. Add `schema: your_schema_name` to the table note.
 
 ```dbml
 Table users {
   id integer
   username varchar
-  note: "schema: auth" // This table belongs to the 'auth' schema
-}
-
-Table posts {
-  id integer
-  title varchar
-  note: "schema: content" // This table belongs to the 'content' schema
+  note: "schema: auth" // Belongs to 'auth' schema
 }
 ```
 
-Tables without a specified schema will be assigned to the `public` schema.
-
-### Documentation Generation
-
-The extension can generate HTML documentation for your database.
-1. Open the DBML preview.
-2. Click the "Generate Documentation" button in the toolbar.
-
-The documentation will be generated in a `docs` folder next to your DBML file. It includes:
-- **Index Page**: A dashboard showing all schemas and project statistics.
-- **Schema Pages**: Detailed views for each schema showing tables, columns, and relationships.
-
-### Allowed Syntax
-
-The following syntax is fully supported and recommended for defining tables and relationships:
+### Enums
+Define reusable enum types.
 
 ```dbml
-Table follows {
-  following_user_id integer
-  followed_user_id integer
-  created_at timestamp
+Enum job_status {
+  created
+  running
+  done
+  failure
 }
-
-Table users {
-  id integer [primary key]
-  username varchar
-  role varchar
-  created_at timestamp
-}
-
-Table posts {
-  id integer [primary key]
-  title varchar
-  body text [note: 'Content of the post']
-  user_id integer [not null]
-  status varchar
-  created_at timestamp
-}
-
-Ref user_posts: posts.user_id > users.id // many-to-one
-
-Ref: users.id <> follows.following_user_id
-
-Ref: users.id <> follows.followed_user_id
 ```
 
-### Not Allowed / Unsupported Syntax
+## Usage
 
-The following DBML features are currently **not supported** or will not be rendered in the diagram:
+1. Open a `.dbml` file.
+2. Click the **Open DBML Preview** icon in the editor title bar (or run the command `Noise DBML: Open DBML Preview`).
+3. Arrange your tables as desired.
+4. Use the toolbar in the preview to manage views or generate documentation.
 
-- **Enums**: `Enum` definitions are parsed but not currently visualized.
-- **Project Information**: `Project` blocks are ignored.
-- **Complex Reference Settings**: While parsed, settings like `[delete: cascade]` or `[update: no action]` are only visible in tooltips and do not change the line style.
+## Requirements
 
-## Support
+- VS Code 1.80.0 or higher.
 
-Report issues and request features through the GitHub repository.
+## Extension Settings
+
+This extension currently does not have any configurable settings.
+
+## Known Issues
+
+- Complex custom colors in DBML might not always render exactly as expected in all themes.
+
+## Release Notes
+
+### 0.0.3
+- Added snippets for `Project`, `Enum`, and `Indexes`.
+- Improved documentation.
+- Added Diagram Views support.
+
+---
+
+**Enjoying Noise DBML?** Please consider leaving a review on the Marketplace!
