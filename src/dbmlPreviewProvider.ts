@@ -3584,60 +3584,52 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                 // First horizontal stub from table edge
                 path += ' L ' + stubStartX + ' ' + startY;
                 
-                // Check if the vertical line at stubStartX would pass through either table
+                // Check if the vertical line at stubStartX or stubEndX would pass through either table
                 const fromTableRight = fromTableX + fromTableWidth;
                 const fromTableBottom = fromTableY + fromTableHeight;
                 const toTableRight = toTableX + toTableWidth;
                 const toTableBottom = toTableY + toTableHeight;
                 
-                // Check if stubStartX is within the horizontal range of either table
-                const passesFromTable = stubStartX >= fromTableX && stubStartX <= fromTableRight;
-                const passesToTable = stubStartX >= toTableX && stubStartX <= toTableRight;
+                // Check if vertical segments would pass through tables
+                const stubStartPassesFromTable = stubStartX >= fromTableX && stubStartX <= fromTableRight;
+                const stubStartPassesToTable = stubStartX >= toTableX && stubStartX <= toTableRight;
+                const stubEndPassesFromTable = stubEndX >= fromTableX && stubEndX <= fromTableRight;
+                const stubEndPassesToTable = stubEndX >= toTableX && stubEndX <= toTableRight;
                 
-                // Check if we need to route around tables
+                // Determine if we need to route around tables
+                // Check if any vertical segment would cross through a table's Y range
+                const minY = Math.min(startY, endY);
+                const maxY = Math.max(startY, endY);
+                
                 let needsReroute = false;
                 let intermediateY = 0;
                 
-                if (passesFromTable) {
-                    // Check if line would pass through from table vertically
-                    const minY = Math.min(startY, endY);
-                    const maxY = Math.max(startY, endY);
-                    if (!(maxY < fromTableY || minY > fromTableBottom)) {
-                        needsReroute = true;
-                        // Route above or below the from table
-                        if (startY < fromTableY && endY > fromTableBottom) {
-                            intermediateY = fromTableY - 30;
-                        } else if (startY > fromTableBottom && endY < fromTableY) {
-                            intermediateY = fromTableBottom + 30;
-                        } else if (startY < endY) {
-                            intermediateY = fromTableY - 30;
-                        } else {
-                            intermediateY = fromTableBottom + 30;
-                        }
-                    }
+                // Check stubStartX against fromTable
+                if (stubStartPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
+                    needsReroute = true;
+                    intermediateY = Math.max(intermediateY, fromTableBottom + 30);
                 }
                 
-                if (!needsReroute && passesToTable) {
-                    // Check if line would pass through to table vertically
-                    const minY = Math.min(startY, endY);
-                    const maxY = Math.max(startY, endY);
-                    if (!(maxY < toTableY || minY > toTableBottom)) {
-                        needsReroute = true;
-                        // Route above or below the to table
-                        if (startY < toTableY && endY > toTableBottom) {
-                            intermediateY = toTableY - 30;
-                        } else if (startY > toTableBottom && endY < toTableY) {
-                            intermediateY = toTableBottom + 30;
-                        } else if (startY < endY) {
-                            intermediateY = toTableY - 30;
-                        } else {
-                            intermediateY = toTableBottom + 30;
-                        }
-                    }
+                // Check stubStartX against toTable
+                if (stubStartPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
+                    needsReroute = true;
+                    intermediateY = Math.max(intermediateY, toTableBottom + 30);
+                }
+                
+                // Check stubEndX against fromTable
+                if (stubEndPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
+                    needsReroute = true;
+                    intermediateY = Math.max(intermediateY, fromTableBottom + 30);
+                }
+                
+                // Check stubEndX against toTable
+                if (stubEndPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
+                    needsReroute = true;
+                    intermediateY = Math.max(intermediateY, toTableBottom + 30);
                 }
                 
                 if (needsReroute) {
-                    // Three-segment path: horizontal -> vertical -> horizontal -> vertical
+                    // Route below both tables: horizontal -> vertical -> horizontal -> vertical
                     path += ' L ' + stubStartX + ' ' + intermediateY;
                     path += ' L ' + stubEndX + ' ' + intermediateY;
                     path += ' L ' + stubEndX + ' ' + endY;
@@ -3655,7 +3647,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
             
             // Update relationship lines
             function updateRelationships() {
-                const defaultTableWidth = 250;
+                const defaultTableWidth = 380;
                 const fieldHeight = 30;
                 const headerHeight = 40;
                 const groupHeaderHeight = 46;
@@ -3690,6 +3682,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                 function buildEndpointInfo(table, fieldOffset) {
                     const tableX = Number.parseFloat(table.getAttribute('data-x') || '0');
                     const tableY = Number.parseFloat(table.getAttribute('data-y') || '0');
+                    const tableWidth = Number.parseFloat(table.getAttribute('data-width') || String(defaultTableWidth));
 
                     if (!Number.isFinite(tableX) || !Number.isFinite(tableY)) {
                         return null;
@@ -3702,7 +3695,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                         return {
                             x: tableX,
                             y: tableY,
-                            width: defaultTableWidth,
+                            width: tableWidth,
                             height: tableHeight,
                             anchorY
                         };
@@ -3726,7 +3719,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                     return {
                         x: tableX,
                         y: tableY,
-                        width: defaultTableWidth,
+                        width: tableWidth,
                         height: fallbackHeight,
                         anchorY: tableY + fallbackHeight / 2
                     };

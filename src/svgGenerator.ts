@@ -109,61 +109,52 @@ function calculateOrthogonalPath(
 	// First horizontal stub from table edge
 	path += ` L ${stubStartX} ${startY}`;
 	
-	// Check if the vertical line at stubStartX would pass through either table
+	// Check if the vertical line at stubStartX or stubEndX would pass through either table
 	const fromTableRight = fromTableX + tableWidth;
 	const fromTableBottom = fromTableY + fromTableHeight;
 	const toTableRight = toTableX + tableWidth;
 	const toTableBottom = toTableY + toTableHeight;
 	
-	// Check if stubStartX is within the horizontal range of either table
-	const passesFromTable = stubStartX >= fromTableX && stubStartX <= fromTableRight;
-	const passesToTable = stubStartX >= toTableX && stubStartX <= toTableRight;
+	// Check if vertical segments would pass through tables
+	const stubStartPassesFromTable = stubStartX >= fromTableX && stubStartX <= fromTableRight;
+	const stubStartPassesToTable = stubStartX >= toTableX && stubStartX <= toTableRight;
+	const stubEndPassesFromTable = stubEndX >= fromTableX && stubEndX <= fromTableRight;
+	const stubEndPassesToTable = stubEndX >= toTableX && stubEndX <= toTableRight;
 	
-	// Check if we need to route around tables
+	// Determine if we need to route around tables
+	// Check if any vertical segment would cross through a table's Y range
+	const minY = Math.min(startY, endY);
+	const maxY = Math.max(startY, endY);
+	
 	let needsReroute = false;
 	let intermediateY = 0;
 	
-	if (passesFromTable) {
-		// Check if line would pass through from table vertically
-		const minY = Math.min(startY, endY);
-		const maxY = Math.max(startY, endY);
-		if (!(maxY < fromTableY || minY > fromTableBottom)) {
-			needsReroute = true;
-			// Route above or below the from table
-			if (startY < fromTableY && endY > fromTableBottom) {
-				// Line crosses the table - route around it
-				intermediateY = fromTableY - 30; // Route above
-			} else if (startY > fromTableBottom && endY < fromTableY) {
-				intermediateY = fromTableBottom + 30; // Route below
-			} else if (startY < endY) {
-				intermediateY = fromTableY - 30; // Going down - route above
-			} else {
-				intermediateY = fromTableBottom + 30; // Going up - route below
-			}
-		}
+	// Check stubStartX against fromTable
+	if (stubStartPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
+		needsReroute = true;
+		intermediateY = Math.max(intermediateY, fromTableBottom + 30);
 	}
 	
-	if (!needsReroute && passesToTable) {
-		// Check if line would pass through to table vertically
-		const minY = Math.min(startY, endY);
-		const maxY = Math.max(startY, endY);
-		if (!(maxY < toTableY || minY > toTableBottom)) {
-			needsReroute = true;
-			// Route above or below the to table
-			if (startY < toTableY && endY > toTableBottom) {
-				intermediateY = toTableY - 30;
-			} else if (startY > toTableBottom && endY < toTableY) {
-				intermediateY = toTableBottom + 30;
-			} else if (startY < endY) {
-				intermediateY = toTableY - 30;
-			} else {
-				intermediateY = toTableBottom + 30;
-			}
-		}
+	// Check stubStartX against toTable
+	if (stubStartPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
+		needsReroute = true;
+		intermediateY = Math.max(intermediateY, toTableBottom + 30);
+	}
+	
+	// Check stubEndX against fromTable
+	if (stubEndPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
+		needsReroute = true;
+		intermediateY = Math.max(intermediateY, fromTableBottom + 30);
+	}
+	
+	// Check stubEndX against toTable
+	if (stubEndPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
+		needsReroute = true;
+		intermediateY = Math.max(intermediateY, toTableBottom + 30);
 	}
 	
 	if (needsReroute) {
-		// Three-segment path: horizontal -> vertical -> horizontal -> vertical
+		// Route below both tables: horizontal -> vertical -> horizontal -> vertical
 		path += ` L ${stubStartX} ${intermediateY}`;
 		path += ` L ${stubEndX} ${intermediateY}`;
 		path += ` L ${stubEndX} ${endY}`;
@@ -431,6 +422,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	});
 	
 	svg += '</g>';
+
 	svg += '<g id="tables">';
 
 	// Build sets of primary keys and foreign keys
