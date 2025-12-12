@@ -551,6 +551,40 @@ export class DbmlPreviewProvider {
     private generateDocsHtml(database: any): string {
         const schema = this.convertToSchema(database, []);
         const tables = schema.tables;
+        const refs = schema.refs;
+
+        // Calculate stats
+        const tablesCount = tables.length;
+        const fieldsCount = tables.reduce((acc, t) => acc + t.fields.length, 0);
+        const refsCount = refs.length;
+
+        const statsHtml = `
+            <div class="stats-container">
+                <div class="stat-item">
+                    <div class="stat-icon">🗃️</div>
+                    <div class="stat-content">
+                        <div class="stat-value">${tablesCount}</div>
+                        <div class="stat-label">Tables</div>
+                    </div>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                    <div class="stat-icon">📋</div>
+                    <div class="stat-content">
+                        <div class="stat-value">${fieldsCount}</div>
+                        <div class="stat-label">Fields</div>
+                    </div>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                    <div class="stat-icon">🔗</div>
+                    <div class="stat-content">
+                        <div class="stat-value">${refsCount}</div>
+                        <div class="stat-label">Relationships</div>
+                    </div>
+                </div>
+            </div>
+        `;
         
         // Project Info
         const projectName = database.name || 'Database Documentation';
@@ -658,6 +692,51 @@ export class DbmlPreviewProvider {
             border-bottom: 2px solid var(--table-border);
             padding-bottom: 2rem;
         }
+
+        .stats-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            background-color: var(--code-bg);
+            border: 1px solid var(--table-border);
+            border-radius: 8px;
+            padding: 1rem 2rem;
+            margin-bottom: 2rem;
+            gap: 2rem;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stat-icon {
+            font-size: 1.5rem;
+        }
+
+        .stat-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: bold;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .stat-divider {
+            width: 1px;
+            height: 2rem;
+            background-color: var(--table-border);
+        }
         
         .badge {
             display: inline-block;
@@ -719,6 +798,7 @@ export class DbmlPreviewProvider {
 </head>
 <body>
     ${projectHtml}
+    ${statsHtml}
     ${tablesHtml}
 </body>
 </html>`;
