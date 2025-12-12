@@ -26,6 +26,36 @@ TableGroup user_management {
 }
 ```
 
+### Schemas
+
+You can organize your tables into schemas using the `note` property on a table. Add `schema: your_schema_name` to the table note.
+
+```dbml
+Table users {
+  id integer
+  username varchar
+  note: "schema: auth" // This table belongs to the 'auth' schema
+}
+
+Table posts {
+  id integer
+  title varchar
+  note: "schema: content" // This table belongs to the 'content' schema
+}
+```
+
+Tables without a specified schema will be assigned to the `public` schema.
+
+### Documentation Generation
+
+The extension can generate HTML documentation for your database.
+1. Open the DBML preview.
+2. Click the "Generate Documentation" button in the toolbar.
+
+The documentation will be generated in a `docs` folder next to your DBML file. It includes:
+- **Index Page**: A dashboard showing all schemas and project statistics.
+- **Schema Pages**: Detailed views for each schema showing tables, columns, and relationships.
+
 ### Allowed Syntax
 
 The following syntax is fully supported and recommended for defining tables and relationships:

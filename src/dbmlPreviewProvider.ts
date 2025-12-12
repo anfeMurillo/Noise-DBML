@@ -452,10 +452,21 @@ export class DbmlPreviewProvider {
 						});
 					}
 					
+					let tableNote = table.note || undefined;
+                    let schemaName = 'public';
+
+                    if (tableNote) {
+                        const schemaMatch = tableNote.match(/schema:\s*([a-zA-Z0-9_]+)/i);
+                        if (schemaMatch) {
+                            schemaName = schemaMatch[1];
+                        }
+                    }
+					
 					tables.push({
 						name: table.name || '',
 						fields: fields,
-						note: table.note || undefined
+						note: tableNote,
+                        schema: schemaName
 					});
 				});
 			}
@@ -537,25 +548,53 @@ export class DbmlPreviewProvider {
             return;
         }
 
-        // Generate HTML content
-        const htmlContent = this.generateDocsHtml(database);
+        const schema = this.convertToSchema(database, []);
+        const tablesBySchema = new Map<string, ParsedTable[]>();
+        
+        schema.tables.forEach(table => {
+            const schemaName = table.schema || 'public';
+            if (!tablesBySchema.has(schemaName)) {
+                tablesBySchema.set(schemaName, []);
+            }
+            tablesBySchema.get(schemaName)!.push(table);
+        });
+
+        // Generate Index HTML (List of Schemas)
+        const indexHtml = this.generateIndexHtml(database, tablesBySchema, schema.refs);
         
         try {
-            await fs.writeFile(path.join(docPath, 'index.html'), htmlContent);
-            vscode.window.showInformationMessage('Documentation generated successfully in ' + docPath);
+            await fs.writeFile(path.join(docPath, 'index.html'), indexHtml);
         } catch (e) {
-            vscode.window.showErrorMessage('Failed to write documentation file: ' + e);
+            vscode.window.showErrorMessage('Failed to write index.html: ' + e);
+            return;
         }
+
+        // Generate Schema HTMLs
+        for (const [schemaName, tables] of tablesBySchema) {
+            const schemaHtml = this.generateSchemaHtml(database, schemaName, tables);
+            try {
+                await fs.writeFile(path.join(docPath, `schema_${schemaName}.html`), schemaHtml);
+            } catch (e) {
+                vscode.window.showErrorMessage(`Failed to write schema_${schemaName}.html: ` + e);
+            }
+        }
+
+        vscode.window.showInformationMessage('Documentation generated successfully in ' + docPath);
     }
 
-    private generateDocsHtml(database: any): string {
-        const schema = this.convertToSchema(database, []);
-        const tables = schema.tables;
-        const refs = schema.refs;
+    private generateIndexHtml(database: any, tablesBySchema: Map<string, ParsedTable[]>, refs: ParsedRef[]): string {
+        // Project Info
+        const projectName = database.name || 'Database Documentation';
+        const projectType = database.databaseType || '';
+        const projectNote = database.note ? this.parseMarkdown(database.note) : '';
 
-        // Calculate stats
-        const tablesCount = tables.length;
-        const fieldsCount = tables.reduce((acc, t) => acc + t.fields.length, 0);
+        // Stats
+        let totalTables = 0;
+        let totalFields = 0;
+        tablesBySchema.forEach(tables => {
+            totalTables += tables.length;
+            totalFields += tables.reduce((acc, t) => acc + t.fields.length, 0);
+        });
         const refsCount = refs.length;
 
         const statsHtml = `
@@ -563,7 +602,7 @@ export class DbmlPreviewProvider {
                 <div class="stat-item">
                     <div class="stat-icon">🗃️</div>
                     <div class="stat-content">
-                        <div class="stat-value">${tablesCount}</div>
+                        <div class="stat-value">${totalTables}</div>
                         <div class="stat-label">Tables</div>
                     </div>
                 </div>
@@ -571,7 +610,7 @@ export class DbmlPreviewProvider {
                 <div class="stat-item">
                     <div class="stat-icon">📋</div>
                     <div class="stat-content">
-                        <div class="stat-value">${fieldsCount}</div>
+                        <div class="stat-value">${totalFields}</div>
                         <div class="stat-label">Fields</div>
                     </div>
                 </div>
@@ -585,21 +624,37 @@ export class DbmlPreviewProvider {
                 </div>
             </div>
         `;
-        
-        // Project Info
-        const projectName = database.name || 'Database Documentation';
-        const projectType = database.databaseType || '';
-        const projectNote = database.note ? this.parseMarkdown(database.note) : '';
 
-        let projectHtml = `
+        let schemasHtml = '<div class="schemas-section"><h2>Schemas</h2><div class="schema-list">';
+        tablesBySchema.forEach((tables, schemaName) => {
+            schemasHtml += `
+                <a href="schema_${schemaName}.html" class="schema-card">
+                    <div class="schema-name">${schemaName}</div>
+                    <div class="schema-stats">${tables.length} tables</div>
+                </a>
+            `;
+        });
+        schemasHtml += '</div></div>';
+
+        return this.getHtmlTemplate(projectName, `
             <div class="project-section">
                 <h1>${projectName}</h1>
                 ${projectType ? `<div class="badge">${projectType}</div>` : ''}
                 <div class="project-note">${projectNote}</div>
             </div>
-        `;
+            ${statsHtml}
+            ${schemasHtml}
+        `);
+    }
 
-        let tablesHtml = '';
+    private generateSchemaHtml(database: any, schemaName: string, tables: ParsedTable[]): string {
+        const projectName = database.name || 'Database Documentation';
+        
+        let tablesHtml = `<div class="schema-header">
+            <a href="index.html" class="back-link">← Back to Schemas</a>
+            <h1>Schema: ${schemaName}</h1>
+        </div>`;
+
         tables.forEach(table => {
             let fieldsHtml = '';
             table.fields.forEach(field => {
@@ -636,12 +691,16 @@ export class DbmlPreviewProvider {
             `;
         });
 
+        return this.getHtmlTemplate(`${projectName} - ${schemaName}`, tablesHtml);
+    }
+
+    private getHtmlTemplate(title: string, content: string): string {
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${projectName} - Documentation</title>
+    <title>${title}</title>
     <style>
         :root {
             --bg-color: #ffffff;
@@ -650,6 +709,8 @@ export class DbmlPreviewProvider {
             --table-header-bg: #f5f5f5;
             --code-bg: #f8f8f8;
             --link-color: #007acc;
+            --card-bg: #ffffff;
+            --card-hover: #f0f0f0;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -660,6 +721,8 @@ export class DbmlPreviewProvider {
                 --table-header-bg: #2d2d2d;
                 --code-bg: #2d2d2d;
                 --link-color: #3794ff;
+                --card-bg: #252526;
+                --card-hover: #2d2d2d;
             }
         }
 
@@ -794,12 +857,58 @@ export class DbmlPreviewProvider {
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
             font-size: 0.9em;
         }
+
+        .schema-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .schema-card {
+            display: block;
+            background-color: var(--card-bg);
+            border: 1px solid var(--table-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .schema-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-decoration: none;
+            background-color: var(--card-hover);
+        }
+
+        .schema-name {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .schema-stats {
+            font-size: 0.9rem;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .schema-header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--table-border);
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
-    ${projectHtml}
-    ${statsHtml}
-    ${tablesHtml}
+    ${content}
 </body>
 </html>`;
     }

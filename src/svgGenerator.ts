@@ -2,6 +2,7 @@ export interface ParsedTable {
 	name: string;
 	fields: ParsedField[];
 	note?: string;
+	schema?: string;
 }
 
 export interface ParsedField {
