@@ -97,6 +97,25 @@ export class DbmlPreviewProvider {
                     }
                 } else if (message.type === 'generateDocs') {
                     await this.generateDocumentation();
+                } else if (message.type === 'exportImage') {
+                    const dataUrl = message.data;
+                    if (dataUrl) {
+                        const matches = dataUrl.match(/^data:image\/([a-z]+);base64,(.+)$/);
+                        if (matches && matches.length === 3) {
+                            const buffer = Buffer.from(matches[2], 'base64');
+                            const uri = await vscode.window.showSaveDialog({
+                                filters: {
+                                    'Images': ['png']
+                                },
+                                defaultUri: vscode.Uri.file('diagram.png')
+                            });
+                            
+                            if (uri) {
+                                await vscode.workspace.fs.writeFile(uri, buffer);
+                                vscode.window.showInformationMessage('Diagram exported successfully!');
+                            }
+                        }
+                    }
                 }
             });
 
@@ -706,7 +725,9 @@ export class DbmlPreviewProvider {
     }
 
     private parseMarkdown(text: string): string {
-        if (!text) return '';
+        if (!text) {
+            return '';
+        }
 
         const lines = text.split('\n');
         let html = '';
@@ -806,6 +827,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
         const magnetIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'switch-svgrepo-com.svg')).toString();
         const resetIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'drag-svgrepo-com.svg')).toString();
         const docsIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'book.svg')).toString();
+        const exportIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'src', 'resources', 'download.svg')).toString();
 
         const layoutJson = JSON.stringify(layoutData ?? {}).replace(/</g, '\u003c');
         const groupsJson = JSON.stringify(groupMetadata ?? []).replace(/</g, '\u003c');
@@ -1752,6 +1774,9 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                 </button>
                 <button class="toolbar-button" id="generateDocsBtn" title="Generate Documentation">
                     <span class="toolbar-icon" style="--toolbar-icon-image: url('${docsIconUri}');"></span>
+                </button>
+                <button class="toolbar-button" id="exportImageBtn" title="Export diagram as image">
+                    <span class="toolbar-icon" style="--toolbar-icon-image: url('${exportIconUri}');"></span>
                 </button>
             </div>
         `}
@@ -3597,6 +3622,120 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                     vscode.postMessage({
                         type: 'generateDocs'
                     });
+                });
+            }
+
+            const exportImageBtn = document.getElementById('exportImageBtn');
+            if (exportImageBtn) {
+                exportImageBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    const svgClone = svg.cloneNode(true);
+                    
+                    // Collect styles
+                    const computedStyle = getComputedStyle(document.body);
+                    const rootStyle = getComputedStyle(document.documentElement);
+                    
+                    const getVar = (name, fallback) => {
+                        let val = computedStyle.getPropertyValue(name);
+                        if (!val || val.trim() === '') {
+                             val = rootStyle.getPropertyValue(name);
+                        }
+                        return (val && val.trim() !== '') ? val : fallback;
+                    };
+
+                    let cssVariables = '';
+                    // Iterate over all properties to find CSS variables
+                    for (let i = 0; i < computedStyle.length; i++) {
+                        const key = computedStyle[i];
+                        if (key.startsWith('--')) {
+                            cssVariables += \`\${key}: \${computedStyle.getPropertyValue(key)};\\n\`;
+                        }
+                    }
+                    
+                    let cssRules = '';
+                    for (let i = 0; i < document.styleSheets.length; i++) {
+                        const sheet = document.styleSheets[i];
+                        try {
+                            for (let j = 0; j < sheet.cssRules.length; j++) {
+                                cssRules += sheet.cssRules[j].cssText + '\\n';
+                            }
+                        } catch (e) {
+                            console.warn('Access to stylesheet denied', e);
+                        }
+                    }
+                    
+                    const bgColor = getVar('--vscode-editor-background', '#1e1e1e');
+                    const fgColor = getVar('--vscode-editor-foreground', '#cccccc');
+                    const btnBg = getVar('--vscode-button-background', '#0e639c');
+                    const btnFg = getVar('--vscode-button-foreground', '#ffffff');
+
+                    const style = document.createElement('style');
+                    style.textContent = \`
+                        :root, body, svg {
+                            \${cssVariables}
+                            background-color: \${bgColor};
+                            color: \${fgColor};
+                        }
+                        \${cssRules}
+                        /* Ensure critical colors are set */
+                        text { fill: \${fgColor} !important; }
+                        .field-name { fill: \${fgColor} !important; }
+                        .field-type { fill: \${fgColor} !important; }
+                        .table-body { fill: \${bgColor} !important; stroke: \${fgColor}; stroke-width: 1px; }
+                        .table-header { fill: \${btnBg} !important; }
+                        .table-name { fill: \${btnFg} !important; }
+                        .relationship-line { stroke: \${fgColor} !important; }
+                        .cardinality-marker { stroke: \${fgColor} !important; fill: \${fgColor} !important; }
+                    \`;
+                    svgClone.insertBefore(style, svgClone.firstChild);
+
+                    // Get the actual bounding box of the content
+                    const bbox = svg.getBBox();
+                    const padding = 50;
+                    const viewBoxX = bbox.x - padding;
+                    const viewBoxY = bbox.y - padding;
+                    const viewBoxWidth = bbox.width + (padding * 2);
+                    const viewBoxHeight = bbox.height + (padding * 2);
+                    
+                    // Set viewBox to match content
+                    svgClone.setAttribute('viewBox', \`\${viewBoxX} \${viewBoxY} \${viewBoxWidth} \${viewBoxHeight}\`);
+                    
+                    // Set dimensions for high resolution export
+                    const scale = 2; // 2x resolution
+                    const width = viewBoxWidth * scale;
+                    const height = viewBoxHeight * scale;
+                    
+                    svgClone.setAttribute('width', width);
+                    svgClone.setAttribute('height', height);
+                    
+                    const serializer = new XMLSerializer();
+                    let svgString = serializer.serializeToString(svgClone);
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    const img = new Image();
+                    const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+                    const url = URL.createObjectURL(svgBlob);
+                    
+                    img.onload = function() {
+                        ctx.fillStyle = bgColor;
+                        ctx.fillRect(0, 0, width, height);
+                        
+                        ctx.drawImage(img, 0, 0, width, height);
+                        URL.revokeObjectURL(url);
+                        
+                        const dataUrl = canvas.toDataURL('image/png');
+                        vscode.postMessage({
+                            type: 'exportImage',
+                            data: dataUrl
+                        });
+                    };
+                    
+                    img.src = url;
                 });
             }
 
