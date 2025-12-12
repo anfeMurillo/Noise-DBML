@@ -571,7 +571,7 @@ export class DbmlPreviewProvider {
 
         // Generate Schema HTMLs
         for (const [schemaName, tables] of tablesBySchema) {
-            const schemaHtml = this.generateSchemaHtml(database, schemaName, tables);
+            const schemaHtml = this.generateSchemaHtml(database, schemaName, tables, tablesBySchema);
             try {
                 await fs.writeFile(path.join(docPath, `schema_${schemaName}.html`), schemaHtml);
             } catch (e) {
@@ -644,10 +644,10 @@ export class DbmlPreviewProvider {
             </div>
             ${statsHtml}
             ${schemasHtml}
-        `);
+        `, this.generateSidebarHtml(tablesBySchema));
     }
 
-    private generateSchemaHtml(database: any, schemaName: string, tables: ParsedTable[]): string {
+    private generateSchemaHtml(database: any, schemaName: string, tables: ParsedTable[], tablesBySchema: Map<string, ParsedTable[]>): string {
         const projectName = database.name || 'Database Documentation';
         
         let tablesHtml = `<div class="schema-header">
@@ -691,10 +691,65 @@ export class DbmlPreviewProvider {
             `;
         });
 
-        return this.getHtmlTemplate(`${projectName} - ${schemaName}`, tablesHtml);
+        return this.getHtmlTemplate(`${projectName} - ${schemaName}`, tablesHtml, this.generateSidebarHtml(tablesBySchema, schemaName));
     }
 
-    private getHtmlTemplate(title: string, content: string): string {
+    private generateSidebarHtml(tablesBySchema: Map<string, ParsedTable[]>, activeSchema?: string): string {
+        let sidebarHtml = `
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="search-box">
+                        <input type="text" placeholder="Search for tables..." id="searchInput">
+                    </div>
+                    <div class="group-by">
+                        <span>Group by: Schemas</span>
+                    </div>
+                </div>
+                <div class="sidebar-content">
+        `;
+
+        tablesBySchema.forEach((tables, schemaName) => {
+            // Auto-expand if it's the active schema
+            const isActive = schemaName === activeSchema;
+            const arrowClass = isActive ? 'expanded' : '';
+            const listStyle = isActive ? 'display: block;' : 'display: none;';
+            
+            sidebarHtml += `
+                <div class="schema-item">
+                    <div class="schema-title" onclick="toggleSchema(this)">
+                        <span class="arrow ${arrowClass}">▶</span>
+                        <span class="icon">▼</span>
+                        <span class="name">${schemaName}</span>
+                    </div>
+                    <ul class="table-list" style="${listStyle}">
+            `;
+            
+            tables.forEach(table => {
+                sidebarHtml += `
+                    <li>
+                        <a href="schema_${schemaName}.html#table-${table.name}" class="table-link">
+                            <span class="icon">□</span>
+                            ${table.name}
+                        </a>
+                    </li>
+                `;
+            });
+            
+            sidebarHtml += `
+                    </ul>
+                </div>
+            `;
+        });
+
+        sidebarHtml += `
+                </div>
+            </div>
+        `;
+        
+        return sidebarHtml;
+    }
+
+    private getHtmlTemplate(title: string, content: string, sidebarContent: string = ''): string {
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -711,6 +766,10 @@ export class DbmlPreviewProvider {
             --link-color: #007acc;
             --card-bg: #ffffff;
             --card-hover: #f0f0f0;
+            --sidebar-bg: #f3f3f3;
+            --sidebar-border: #e0e0e0;
+            --sidebar-hover: #e8e8e8;
+            --sidebar-active: #d0d0d0;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -723,6 +782,10 @@ export class DbmlPreviewProvider {
                 --link-color: #3794ff;
                 --card-bg: #252526;
                 --card-hover: #2d2d2d;
+                --sidebar-bg: #252526;
+                --sidebar-border: #333333;
+                --sidebar-hover: #2a2d2e;
+                --sidebar-active: #37373d;
             }
         }
 
@@ -731,9 +794,111 @@ export class DbmlPreviewProvider {
             line-height: 1.6;
             color: var(--text-color);
             background-color: var(--bg-color);
-            max-width: 1200px;
-            margin: 0 auto;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .main-content {
+            flex: 1;
             padding: 2rem;
+            overflow-y: auto;
+            max-width: 100%;
+        }
+
+        /* Sidebar Styles */
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--sidebar-border);
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--sidebar-border);
+            border-radius: 4px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            box-sizing: border-box;
+        }
+
+        .group-by {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .schema-item {
+            user-select: none;
+        }
+
+        .schema-title {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .schema-title:hover {
+            background-color: var(--sidebar-hover);
+        }
+
+        .arrow {
+            font-size: 0.8rem;
+            transition: transform 0.2s;
+            display: inline-block;
+            width: 1rem;
+            text-align: center;
+        }
+
+        .arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .table-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: none;
+        }
+        
+        .table-list.expanded {
+            display: block;
+        }
+
+        .table-list li a {
+            display: block;
+            padding: 0.4rem 1rem 0.4rem 2.5rem;
+            color: var(--text-color);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .table-list li a:hover {
+            background-color: var(--sidebar-hover);
+            text-decoration: none;
+        }
+        
+        .icon {
+            margin-right: 0.5rem;
+            opacity: 0.7;
         }
 
         h1, h2, h3 {
@@ -906,9 +1071,60 @@ export class DbmlPreviewProvider {
             font-size: 0.9rem;
         }
     </style>
+    <script>
+        function toggleSchema(element) {
+            const list = element.nextElementSibling;
+            const arrow = element.querySelector('.arrow');
+            
+            if (list.style.display === 'none' || !list.style.display) {
+                list.style.display = 'block';
+                arrow.classList.add('expanded');
+            } else {
+                list.style.display = 'none';
+                arrow.classList.remove('expanded');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const term = e.target.value.toLowerCase();
+                    const schemas = document.querySelectorAll('.schema-item');
+                    
+                    schemas.forEach(schema => {
+                        let hasVisibleTables = false;
+                        const tables = schema.querySelectorAll('li');
+                        tables.forEach(table => {
+                            const text = table.textContent.toLowerCase();
+                            if (text.includes(term)) {
+                                table.style.display = 'block';
+                                hasVisibleTables = true;
+                            } else {
+                                table.style.display = 'none';
+                            }
+                        });
+                        
+                        if (hasVisibleTables || term === '') {
+                            schema.style.display = 'block';
+                            if (term !== '') {
+                                schema.querySelector('.table-list').style.display = 'block';
+                                schema.querySelector('.arrow').classList.add('expanded');
+                            }
+                        } else {
+                            schema.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        });
+    </script>
 </head>
 <body>
-    ${content}
+    ${sidebarContent}
+    <div class="main-content">
+        ${content}
+    </div>
 </body>
 </html>`;
     }
