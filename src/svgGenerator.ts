@@ -109,6 +109,10 @@ function calculateOrthogonalPath(
 	// First horizontal stub from table edge
 	path += ` L ${stubStartX} ${startY}`;
 	
+	// Calculate preferred horizontal grid line
+	// Snap to nearest grid line to ensure horizontal segments follow the grid
+	const midY = Math.round(endY / gridSize) * gridSize;
+
 	// Check if the vertical line at stubStartX or stubEndX would pass through either table
 	const fromTableRight = fromTableX + tableWidth;
 	const fromTableBottom = fromTableY + fromTableHeight;
@@ -123,8 +127,9 @@ function calculateOrthogonalPath(
 	
 	// Determine if we need to route around tables
 	// Check if any vertical segment would cross through a table's Y range
-	const minY = Math.min(startY, endY);
-	const maxY = Math.max(startY, endY);
+	// We consider the path startY -> midY -> endY
+	const minY = Math.min(startY, endY, midY);
+	const maxY = Math.max(startY, endY, midY);
 	
 	let needsReroute = false;
 	let intermediateY = 0;
@@ -132,35 +137,58 @@ function calculateOrthogonalPath(
 	// Check stubStartX against fromTable
 	if (stubStartPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
 		needsReroute = true;
-		intermediateY = Math.max(intermediateY, fromTableBottom + 30);
+		intermediateY = Math.max(intermediateY, fromTableBottom + gridSize);
 	}
 	
 	// Check stubStartX against toTable
 	if (stubStartPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
 		needsReroute = true;
-		intermediateY = Math.max(intermediateY, toTableBottom + 30);
+		intermediateY = Math.max(intermediateY, toTableBottom + gridSize);
 	}
 	
 	// Check stubEndX against fromTable
 	if (stubEndPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
 		needsReroute = true;
-		intermediateY = Math.max(intermediateY, fromTableBottom + 30);
+		intermediateY = Math.max(intermediateY, fromTableBottom + gridSize);
 	}
 	
 	// Check stubEndX against toTable
 	if (stubEndPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
 		needsReroute = true;
-		intermediateY = Math.max(intermediateY, toTableBottom + 30);
+		intermediateY = Math.max(intermediateY, toTableBottom + gridSize);
+	}
+
+	// Check horizontal segment at midY (from stubStartX to stubEndX)
+	const minStubX = Math.min(stubStartX, stubEndX);
+	const maxStubX = Math.max(stubStartX, stubEndX);
+	
+	// Check if horizontal segment crosses fromTable
+	if (midY >= fromTableY - 5 && midY <= fromTableBottom + 5 && 
+		maxStubX > fromTableX && minStubX < fromTableRight) {
+		needsReroute = true;
+		intermediateY = Math.max(intermediateY, fromTableBottom + gridSize);
+	}
+	
+	// Check if horizontal segment crosses toTable
+	if (midY >= toTableY - 5 && midY <= toTableBottom + 5 && 
+		maxStubX > toTableX && minStubX < toTableRight) {
+		needsReroute = true;
+		intermediateY = Math.max(intermediateY, toTableBottom + gridSize);
 	}
 	
 	if (needsReroute) {
+		// Snap intermediateY to grid
+		intermediateY = Math.ceil(intermediateY / gridSize) * gridSize;
+
 		// Route below both tables: horizontal -> vertical -> horizontal -> vertical
 		path += ` L ${stubStartX} ${intermediateY}`;
 		path += ` L ${stubEndX} ${intermediateY}`;
 		path += ` L ${stubEndX} ${endY}`;
 	} else {
-		// Simple two-segment path
-		path += ` L ${stubStartX} ${endY}`;
+		// Simple path with grid alignment
+		// L stubStartX midY -> L stubEndX midY -> L stubEndX endY
+		path += ` L ${stubStartX} ${midY}`;
+		path += ` L ${stubEndX} ${midY}`;
 		path += ` L ${stubEndX} ${endY}`;
 	}
 	
