@@ -58,6 +58,12 @@
         "scopeName": "source.dbml",
         "path": "./syntaxes/dbml.tmLanguage.json"
       }
+    ],
+    "snippets": [
+      {
+        "language": "dbml",
+        "path": "./snippets/dbml.json"
+      }
     ]
   },
   "scripts": {
