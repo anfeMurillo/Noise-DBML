@@ -717,8 +717,11 @@ export class DbmlPreviewProvider {
             sidebarHtml += `
                 <div class="schema-item">
                     <div class="schema-title" onclick="toggleSchema(this)">
-                        <span class="arrow ${arrowClass}">▶</span>
-                        <span class="icon">▼</span>
+                        <span class="arrow ${arrowClass}">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M5 3l14 9-14 9V3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
                         <span class="name">${schemaName}</span>
                     </div>
                     <ul class="table-list" style="${listStyle}">
@@ -728,7 +731,11 @@ export class DbmlPreviewProvider {
                 sidebarHtml += `
                     <li>
                         <a href="schema_${schemaName}.html#table-${table.name}" class="table-link">
-                            <span class="icon">□</span>
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 6H3.01919M3.01919 6H20.9809M3.01919 6C3 6.31438 3 6.70191 3 7.2002V16.8002C3 17.9203 3 18.4796 3.21799 18.9074C3.40973 19.2837 3.71547 19.5905 4.0918 19.7822C4.51921 20 5.079 20 6.19694 20L17.8031 20C18.921 20 19.48 20 19.9074 19.7822C20.2837 19.5905 20.5905 19.2837 20.7822 18.9074C21 18.48 21 17.921 21 16.8031L21 7.19691C21 6.70021 21 6.31368 20.9809 6M3.01919 6C3.04314 5.60768 3.09697 5.3293 3.21799 5.0918C3.40973 4.71547 3.71547 4.40973 4.0918 4.21799C4.51962 4 5.08009 4 6.2002 4H17.8002C18.9203 4 19.4796 4 19.9074 4.21799C20.2837 4.40973 20.5905 4.71547 20.7822 5.0918C20.9032 5.3293 20.957 5.60768 20.9809 6M20.9809 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
                             ${table.name}
                         </a>
                     </li>
@@ -863,9 +870,11 @@ export class DbmlPreviewProvider {
         .arrow {
             font-size: 0.8rem;
             transition: transform 0.2s;
-            display: inline-block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: 1rem;
-            text-align: center;
+            height: 1rem;
         }
 
         .arrow.expanded {
@@ -884,7 +893,8 @@ export class DbmlPreviewProvider {
         }
 
         .table-list li a {
-            display: block;
+            display: flex;
+            align-items: center;
             padding: 0.4rem 1rem 0.4rem 2.5rem;
             color: var(--text-color);
             text-decoration: none;
@@ -899,6 +909,8 @@ export class DbmlPreviewProvider {
         .icon {
             margin-right: 0.5rem;
             opacity: 0.7;
+            display: flex;
+            align-items: center;
         }
 
         h1, h2, h3 {
