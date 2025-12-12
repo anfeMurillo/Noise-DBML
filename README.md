@@ -2,8 +2,8 @@
 
 Visual Studio Code extension for previewing DBML (Database Markup Language) relational diagrams.
 
-![Example 1](media/example_1.png)
-![Example 2](media/example_2.png)
+![Example 1](https://raw.githubusercontent.com/anfeh/dbml-diagram-viewer/main/media/example_1.png)
+![Example 2](https://raw.githubusercontent.com/anfeh/dbml-diagram-viewer/main/media/example_2.png)
 
 ## Features
 
