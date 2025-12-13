@@ -12,7 +12,8 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onLanguage:dbml"
+    "onLanguage:dbml",
+    "onCommand:noise-dbml.reverseEngineerDb"
   ],
   "main": "./dist/extension.js",
   "icon": "src/resources/icon.png",
@@ -36,6 +37,11 @@
         "command": "noise-dbml.detectAntiPatterns",
         "title": "DBML: Detect Anti-Patterns",
         "icon": "$(warning)"
+      },
+      {
+        "command": "noise-dbml.reverseEngineerDb",
+        "title": "DBML: Reverse Engineer from Database",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -53,6 +59,10 @@
         {
           "when": "resourceLangId == dbml",
           "command": "noise-dbml.detectAntiPatterns",
+          "group": "navigation"
+        },
+        {
+          "command": "noise-dbml.reverseEngineerDb",
           "group": "navigation"
         }
       ]
@@ -109,7 +119,10 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
+    "@types/mssql": "^9.1.8",
     "@types/node": "22.x",
+    "@types/pg": "^8.16.0",
+    "@types/tedious": "^4.0.14",
     "@types/vscode": "^1.107.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
@@ -120,6 +133,10 @@
     "typescript-eslint": "^8.48.1"
   },
   "dependencies": {
-    "@dbml/core": "^5.3.0"
+    "@dbml/core": "^5.3.0",
+    "mssql": "^10.0.1",
+    "mysql2": "^3.9.7",
+    "pg": "^8.11.3",
+    "sqlite3": "^5.1.7"
   }
 }

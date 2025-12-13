@@ -1,3 +1,4 @@
+import { reverseEngineerToDbml, SupportedDb } from './dbmlReverseEngineer';
 import * as vscode from 'vscode';
 import { Parser } from '@dbml/core';
 import { DbmlPreviewProvider } from './dbmlPreviewProvider';
@@ -10,6 +11,94 @@ import { AntiPatternDetector } from './antiPatternDetector';
 import { AntiPatternPanel } from './antiPatternPanel';
 
 export function activate(context: vscode.ExtensionContext) {
+	console.log('DBML Diagram Viewer extension is activating...');
+
+	// Register the command to reverse engineer a database to DBML
+	const reverseEngineerCommand = vscode.commands.registerCommand('noise-dbml.reverseEngineerDb', async () => {
+		console.log('Reverse engineer command executed');
+
+		try {
+			// Ask user for database type
+			const dbTypePick = await vscode.window.showQuickPick([
+				{ label: 'PostgreSQL', value: 'postgres' as SupportedDb },
+				{ label: 'MySQL', value: 'mysql' as SupportedDb },
+				{ label: 'SQLite', value: 'sqlite' as SupportedDb },
+				{ label: 'SQL Server', value: 'sqlserver' as SupportedDb }
+			], {
+				placeHolder: 'Select the database type to reverse engineer',
+				title: 'Database Type'
+			});
+
+			console.log('Database type selected:', dbTypePick?.value);
+
+			if (!dbTypePick) {
+				console.log('User cancelled database type selection');
+				return;
+			}
+
+			// Ask user for connection string or file path
+			let connString = '';
+			if (dbTypePick.value === 'sqlite') {
+				console.log('Showing file picker for SQLite');
+				const fileUri = await vscode.window.showOpenDialog({
+					canSelectMany: false,
+					openLabel: 'Select SQLite Database File',
+					filters: { 'SQLite DB': ['db', 'sqlite', 'sqlite3'] }
+				});
+				if (!fileUri || fileUri.length === 0) {
+					console.log('User cancelled file selection');
+					return;
+				}
+				connString = fileUri[0].fsPath;
+				console.log('SQLite file selected:', connString);
+			} else {
+				console.log('Showing connection string input');
+				const input = await vscode.window.showInputBox({
+					prompt: 'Enter the connection string for the database',
+					ignoreFocusOut: true,
+					placeHolder: 'postgresql://user:password@host:port/database'
+				});
+				if (!input) {
+					console.log('User cancelled connection string input');
+					return;
+				}
+				connString = input;
+				console.log('Connection string entered (length):', connString.length);
+			}
+
+			// Run reverse engineering
+			console.log('Starting reverse engineering process...');
+
+			await vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: 'Reverse engineering database...',
+				cancellable: false
+			}, async (progress) => {
+				try {
+					progress.report({ increment: 10, message: 'Connecting to database...' });
+					const dbml = await reverseEngineerToDbml({ type: dbTypePick.value, connectionString: connString });
+
+					progress.report({ increment: 80, message: 'Creating DBML file...' });
+					const doc = await vscode.workspace.openTextDocument({ content: dbml, language: 'dbml' });
+					await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+
+					progress.report({ increment: 10, message: 'Complete!' });
+					vscode.window.showInformationMessage('DBML generated from database successfully!');
+					console.log('Reverse engineering completed successfully');
+				} catch (innerError: any) {
+					console.error('Error during reverse engineering:', innerError);
+					throw innerError; // Re-throw to be caught by outer catch
+				}
+			});
+
+		} catch (err: any) {
+			console.error('Failed to reverse engineer database:', err);
+			const errorMessage = err.message || err.toString();
+			vscode.window.showErrorMessage(`Failed to reverse engineer database: ${errorMessage}`);
+		}
+	});
+
+	context.subscriptions.push(reverseEngineerCommand);
 	console.log('DBML Diagram Viewer extension is now active!');
 
 	// Register the DBML preview provider

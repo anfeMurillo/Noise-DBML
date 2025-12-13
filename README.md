@@ -132,12 +132,65 @@ Ref: posts.user_id > users.id [delete: cascade]
 - Press `Ctrl+Shift+P` and run **"DBML: Generate SQL"**
 - Select your database dialect and options
 
-### 4. Detect Anti-Patterns
-- Click the **⚠️ warning icon** in the editor toolbar, or
-- Press `Ctrl+Shift+P` and run **"DBML: Detect Anti-Patterns"**
-- Review the generated report with recommendations
+### 4. Reverse Engineer from Database
+- Click the **☁️ cloud-download icon** in the editor toolbar, or
+- Press `Ctrl+Shift+P` and run **"DBML: Reverse Engineer from Database"**
+- Select your database type and provide connection details
 
 ## 🎯 Usage
+
+### Reverse Engineering from Database
+
+Import existing database schemas into DBML format:
+
+#### Supported Databases
+- **PostgreSQL** - Full support with schema detection
+- **MySQL** - Complete table and relationship import
+- **SQLite** - Local database file support
+- **SQL Server** - Enterprise database support
+
+#### PostgreSQL Connection Examples
+
+**Standard Connection String:**
+```
+postgresql://username:password@localhost:5432/database_name
+```
+
+**Service URIs (Heroku, Railway, Supabase, etc.):**
+```
+postgres://username:password@host:5432/database_name
+```
+
+**Connection String Format:**
+- `postgresql://user:password@host:port/database`
+- `postgres://user:password@host:port/database`
+
+#### Troubleshooting PostgreSQL Connections
+
+If the reverse engineering fails:
+
+1. **Test your connection string** using the provided test script:
+   ```bash
+   node test-postgres-connection.js "your-connection-string"
+   ```
+
+2. **Common issues:**
+   - **SSL requirements**: Some cloud providers require SSL. Try adding `?sslmode=require` to your connection string
+   - **Schema permissions**: Ensure your user has access to `information_schema` tables
+   - **Empty schemas**: The tool searches multiple schemas if `public` is empty
+   - **Connection timeouts**: Cloud databases may need longer timeouts
+
+3. **For cloud databases**, try these variations:
+   - Heroku: `postgresql://user:pass@host:5432/dbname?sslmode=require`
+   - Supabase: Use the connection string from your project settings
+   - Railway: Use the DATABASE_URL environment variable value
+
+The reverse engineering will automatically detect:
+- All accessible schemas
+- Tables with columns, types, and constraints
+- Primary keys and auto-increment fields
+- Foreign key relationships
+- Default values and nullability
 
 ### Visual Preview
 1. Open any `.dbml` file
