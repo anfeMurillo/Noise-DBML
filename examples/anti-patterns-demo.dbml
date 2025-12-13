@@ -1,0 +1,129 @@
+// DBML Demo: Anti-Pattern Detection Examples
+// This file demonstrates various anti-patterns that will be detected
+
+// ❌ ANTI-PATTERN: Table without primary key
+Table users_without_pk {
+  username varchar(50)
+  email varchar(100)
+  created_at timestamp
+  
+  Note: 'This table lacks a primary key - will be detected as an issue'
+}
+
+// ❌ ANTI-PATTERN: Too many nullable fields
+Table customer_data {
+  id integer [pk, increment]
+  name varchar(100)
+  email varchar(100)          // nullable
+  phone varchar(20)           // nullable
+  address varchar(200)        // nullable
+  city varchar(50)            // nullable
+  state varchar(50)           // nullable
+  zip_code varchar(10)        // nullable
+  country varchar(50)         // nullable
+  notes text                  // nullable
+  preferences text            // nullable
+  
+  Note: 'This table has too many nullable fields (80%)'
+}
+
+// ❌ ANTI-PATTERN: Using SQL reserved word as table name
+Table user {
+  id integer [pk, increment]
+  name varchar(100) [not null]
+  order integer                // 'order' is also a reserved word
+  
+  Note: 'Table name "user" is a reserved SQL keyword'
+}
+
+// ❌ ANTI-PATTERN: Too many fields in one table
+Table mega_table {
+  id integer [pk, increment]
+  field1 varchar
+  field2 varchar
+  field3 varchar
+  field4 varchar
+  field5 varchar
+  field6 varchar
+  field7 varchar
+  field8 varchar
+  field9 varchar
+  field10 varchar
+  field11 varchar
+  field12 varchar
+  field13 varchar
+  field14 varchar
+  field15 varchar
+  field16 varchar
+  field17 varchar
+  field18 varchar
+  field19 varchar
+  field20 varchar
+  field21 varchar
+  field22 varchar
+  
+  Note: 'This table has too many fields (22) - should be split'
+}
+
+// ❌ ANTI-PATTERN: Field named 'id' but not a primary key
+Table products {
+  product_id integer [pk, increment]
+  id varchar(50)  // This looks like an ID but isn't the PK
+  name varchar(200) [not null]
+  price decimal(10,2)
+  
+  Note: 'Field named "id" but not marked as primary key - confusing!'
+}
+
+// ⚠️ WARNING: Potential circular dependency
+Table posts {
+  id integer [pk, increment]
+  user_id integer [not null]
+  title varchar(200) [not null]
+  content text
+}
+
+Table comments {
+  id integer [pk, increment]
+  post_id integer [not null]
+  user_id integer [not null]
+  comment_text text [not null]
+}
+
+// Create circular references
+Ref: posts.user_id > user.id
+Ref: comments.post_id > posts.id
+Ref: comments.user_id > user.id
+
+// ✅ GOOD EXAMPLE: Well-designed table
+Table orders {
+  id integer [pk, increment]
+  user_id integer [not null]
+  order_date timestamp [not null, default: `now()`]
+  total_amount decimal(10,2) [not null]
+  status varchar(20) [not null, default: 'pending']
+  
+  Note: 'This table follows best practices'
+}
+
+Ref: orders.user_id > user.id [delete: cascade]
+
+// ⚠️ INFO: Foreign key without explicit index
+Table order_items {
+  id integer [pk, increment]
+  order_id integer [not null]
+  product_id integer [not null]
+  quantity integer [not null]
+  price decimal(10,2) [not null]
+  
+  Note: 'Foreign keys might benefit from indexes'
+}
+
+Ref: order_items.order_id > orders.id
+Ref: order_items.product_id > products.product_id
+
+// Instructions:
+// 1. Open this file in VS Code
+// 2. Click the warning icon (⚠️) in the toolbar
+// 3. Or use Command Palette: "DBML: Detect Anti-Patterns"
+// 4. Review the generated report with all detected issues

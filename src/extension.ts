@@ -6,12 +6,17 @@ import { DbmlDocumentFormatter } from './dbmlFormatter';
 import { DbmlDefinitionProvider } from './dbmlDefinitionProvider';
 import { generateSql, SqlGenerationOptions } from './sqlGenerator';
 import { ParsedSchema } from './svgGenerator';
+import { AntiPatternDetector } from './antiPatternDetector';
+import { AntiPatternPanel } from './antiPatternPanel';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('DBML Diagram Viewer extension is now active!');
 
 	// Register the DBML preview provider
 	const provider = new DbmlPreviewProvider(context.extensionUri);
+	
+	// Register the anti-pattern panel provider
+	const antiPatternPanel = new AntiPatternPanel(context.extensionUri);
 
 	// Register completion item provider
 	context.subscriptions.push(
@@ -189,6 +194,98 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(generateSqlCommand);
+
+	// Register the command to detect anti-patterns
+	const detectAntiPatternsCommand = vscode.commands.registerCommand('noise-dbml.detectAntiPatterns', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showErrorMessage('No active editor found');
+			return;
+		}
+
+		if (editor.document.languageId !== 'dbml') {
+			vscode.window.showWarningMessage('This command only works with DBML files');
+			return;
+		}
+
+		try {
+			const dbmlContent = editor.document.getText();
+			
+			// Parse DBML
+			let database: any;
+			try {
+				// @ts-ignore
+				database = Parser.parse(dbmlContent, 'dbml');
+			} catch (parseError: any) {
+				if (parseError.diags && Array.isArray(parseError.diags)) {
+					const messages = parseError.diags.map((d: any) => 
+						`Line ${d.location?.start?.line}: ${d.message || d.error}`
+					).join('\n');
+					vscode.window.showErrorMessage(`DBML Parse Error:\n${messages}`);
+				} else {
+					vscode.window.showErrorMessage(`Failed to parse DBML: ${parseError.message}`);
+				}
+				return;
+			}
+
+			// Convert to ParsedSchema format
+			const schema: ParsedSchema = {
+				tables: database.schemas.flatMap((s: any) => 
+					s.tables.map((t: any) => ({
+						name: t.name,
+						schema: s.name !== 'public' ? s.name : undefined,
+						fields: t.fields.map((f: any) => ({
+							name: f.name,
+							type: f.type.type_name,
+							pk: f.pk,
+							unique: f.unique,
+							notNull: f.not_null,
+							increment: f.increment,
+							note: f.note
+						})),
+						note: t.note
+					}))
+				),
+				refs: database.schemas.flatMap((s: any) => 
+					s.refs.map((r: any) => ({
+						name: r.name,
+						endpoints: r.endpoints.map((e: any) => ({
+							tableName: e.tableName,
+							fieldNames: e.fieldNames,
+							relation: e.relation
+						})),
+						onDelete: r.onDelete,
+						onUpdate: r.onUpdate
+					}))
+				),
+				groups: []
+			};
+
+			// Detect anti-patterns
+			const detector = new AntiPatternDetector();
+			const patterns = detector.detect(schema);
+
+			// Show report in side panel
+			antiPatternPanel.showAntiPatterns(patterns);
+			
+			// Show a summary notification
+			if (patterns.length === 0) {
+				vscode.window.showInformationMessage('No anti-patterns detected in the schema.');
+			} else {
+				const errors = patterns.filter(p => p.type === 'error').length;
+				const warnings = patterns.filter(p => p.type === 'warning').length;
+				const infos = patterns.filter(p => p.type === 'info').length;
+				vscode.window.showInformationMessage(
+					`Detected ${patterns.length} issue(s): ${errors} error(s), ${warnings} warning(s), ${infos} info(s)`
+				);
+			}
+		} catch (error: any) {
+			vscode.window.showErrorMessage(`Error detecting anti-patterns: ${error.message}`);
+			console.error('Anti-pattern detection error:', error);
+		}
+	});
+
+	context.subscriptions.push(detectAntiPatternsCommand);
 
 	// Watch for document save to update preview
 	context.subscriptions.push(

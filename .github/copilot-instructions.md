@@ -4,18 +4,21 @@ VS Code extension for previewing DBML (Database Markup Language) relational diag
 
 ## Project Status
 - [x] Create .github/copilot-instructions.md file
-- [ ] Get project setup information for VS Code extension
-- [ ] Scaffold VS Code extension project structure
-- [ ] Implement DBML parser and preview functionality
-- [ ] Add theme color adaptation
-- [ ] Install dependencies and compile project
-- [ ] Test the extension
+- [x] Get project setup information for VS Code extension
+- [x] Scaffold VS Code extension project structure
+- [x] Implement DBML parser and preview functionality
+- [x] Add theme color adaptation
+- [x] Install dependencies and compile project
+- [x] Test the extension
+- [x] Add anti-pattern detection feature
 
 ## Features
 - DBML syntax support for .dbml files
 - Preview button (eye icon) in editor toolbar
 - Diagram rendering in webview panel
 - Automatic theme color adaptation
+- SQL generation for multiple database dialects
+- Anti-pattern detection with detailed reports
 
 ## Development Guidelines
 - Use TypeScript for VS Code extension development

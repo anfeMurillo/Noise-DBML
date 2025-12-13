@@ -31,6 +31,11 @@
         "command": "noise-dbml.generateSql",
         "title": "DBML: Generate SQL",
         "icon": "$(database)"
+      },
+      {
+        "command": "noise-dbml.detectAntiPatterns",
+        "title": "DBML: Detect Anti-Patterns",
+        "icon": "$(warning)"
       }
     ],
     "menus": {
@@ -43,6 +48,11 @@
         {
           "when": "resourceLangId == dbml",
           "command": "noise-dbml.generateSql",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceLangId == dbml",
+          "command": "noise-dbml.detectAntiPatterns",
           "group": "navigation"
         }
       ]

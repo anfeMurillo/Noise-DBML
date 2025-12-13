@@ -75,6 +75,18 @@ Convert DBML to production-ready SQL scripts for any database:
 - **Schema Support**: Multi-schema support (PostgreSQL, SQL Server)
 - **Drop Statements**: Optional DROP TABLE statements for development
 
+### 🔍 Anti-Pattern Detection
+Automatically detect design issues and best practice violations:
+
+- **Missing Primary Keys**: Identifies tables without primary keys
+- **Excessive NULL Fields**: Detects tables with too many nullable columns
+- **Reserved Keywords**: Warns about SQL reserved words in table/field names
+- **Naming Conventions**: Checks for invalid naming patterns
+- **Large Tables**: Flags tables with too many columns
+- **Circular Dependencies**: Detects mutual table references
+- **Missing Indexes**: Suggests indexes for foreign key fields
+- **Detailed Reports**: Provides clear explanations and recommendations
+
 ### 🎨 Table Groups
 Organize and visualize related tables with colored backgrounds.
 
@@ -119,6 +131,11 @@ Ref: posts.user_id > users.id [delete: cascade]
 - Click the **🗄️ database icon** in the editor toolbar, or
 - Press `Ctrl+Shift+P` and run **"DBML: Generate SQL"**
 - Select your database dialect and options
+
+### 4. Detect Anti-Patterns
+- Click the **⚠️ warning icon** in the editor toolbar, or
+- Press `Ctrl+Shift+P` and run **"DBML: Detect Anti-Patterns"**
+- Review the generated report with recommendations
 
 ## 🎯 Usage
 
@@ -220,6 +237,33 @@ indexes {
   column_name
 }
 ```
+
+### Anti-Pattern Detection
+
+Analyze your database schema for common issues:
+
+1. Open a `.dbml` file
+2. Click the warning icon (⚠️) or use Command Palette
+3. Review the generated report with:
+   - **Errors**: Critical issues (e.g., empty tables)
+   - **Warnings**: Important problems (e.g., missing primary keys)
+   - **Info**: Suggestions (e.g., naming conventions)
+
+**Examples of detected anti-patterns:**
+
+- ✅ Tables without primary keys
+- ✅ Too many nullable fields (>50%)
+- ✅ Tables with too many columns (>20)
+- ✅ SQL reserved keywords as names
+- ✅ Invalid naming conventions
+- ✅ Fields that look like IDs but aren't PKs
+- ✅ Missing indexes on foreign keys
+- ✅ Circular table dependencies
+
+Each issue includes:
+- Clear description of the problem
+- Impact explanation
+- Specific recommendation to fix it
 
 ## 📝 DBML Syntax Guide
 
