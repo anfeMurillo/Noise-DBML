@@ -3,6 +3,7 @@ import { Parser } from '@dbml/core';
 import { DbmlPreviewProvider } from './dbmlPreviewProvider';
 import { DbmlCompletionItemProvider } from './dbmlCompletion';
 import { DbmlDocumentFormatter } from './dbmlFormatter';
+import { DbmlDefinitionProvider } from './dbmlDefinitionProvider';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('DBML Diagram Viewer extension is now active!');
@@ -24,6 +25,14 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.languages.registerDocumentFormattingEditProvider(
 			{ language: 'dbml', scheme: 'file' },
 			new DbmlDocumentFormatter()
+		)
+	);
+
+	// Register definition provider (Go to Definition)
+	context.subscriptions.push(
+		vscode.languages.registerDefinitionProvider(
+			{ language: 'dbml', scheme: 'file' },
+			new DbmlDefinitionProvider()
 		)
 	);
 
