@@ -1,0 +1,64 @@
+// Example DBML schema for testing SQL generation
+
+Project "E-commerce Platform" {
+  database_type: 'PostgreSQL'
+  Note: 'A simple e-commerce database schema'
+}
+
+Table users {
+  id integer [pk, increment]
+  username varchar(50) [unique, not null]
+  email varchar(100) [unique, not null]
+  password_hash varchar(255) [not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+  
+  Note: 'User accounts table'
+}
+
+Table products {
+  id integer [pk, increment]
+  name varchar(200) [not null]
+  description text
+  price decimal(10,2) [not null]
+  stock_quantity integer [default: 0]
+  category_id integer
+  created_at timestamp [default: `now()`]
+  
+  Note: 'Products catalog'
+}
+
+Table categories {
+  id integer [pk, increment]
+  name varchar(100) [unique, not null]
+  parent_id integer
+  
+  Note: 'Product categories with hierarchical support'
+}
+
+Table orders {
+  id integer [pk, increment]
+  user_id integer [not null]
+  total_amount decimal(10,2) [not null]
+  status varchar(20) [default: 'pending']
+  created_at timestamp [default: `now()`]
+  
+  Note: 'Customer orders'
+}
+
+Table order_items {
+  id integer [pk, increment]
+  order_id integer [not null]
+  product_id integer [not null]
+  quantity integer [not null]
+  unit_price decimal(10,2) [not null]
+  
+  Note: 'Items in each order'
+}
+
+// Define relationships
+Ref: products.category_id > categories.id
+Ref: categories.parent_id > categories.id
+Ref: orders.user_id > users.id [delete: cascade]
+Ref: order_items.order_id > orders.id [delete: cascade]
+Ref: order_items.product_id > products.id [delete: restrict]

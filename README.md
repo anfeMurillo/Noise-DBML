@@ -17,6 +17,7 @@ Visual Studio Code extension for previewing DBML (Database Markup Language) rela
 
 ### Documentation and Export
 - **Documentation Generation**: Generate Markdown documentation for your database schema directly from the preview.
+- **SQL Generation**: Convert your DBML schema to SQL scripts (CREATE TABLE, etc.) for multiple database dialects.
 - **Tooltips**: Hover over fields to see their notes/comments.
 
 ### Productivity Snippets
@@ -86,10 +87,30 @@ Supported relationship types:
 
 ## Usage
 
+### Visual Preview
 1. Open a `.dbml` file.
 2. Click the **Open DBML Preview** icon in the editor title bar (or run the command `Noise DBML: Open DBML Preview`).
 3. Arrange your tables as desired.
 4. Use the toolbar in the preview to manage views or generate documentation.
+
+### Generate SQL
+1. Open a `.dbml` file.
+2. Click the **Generate SQL** icon in the editor title bar (or run the command `DBML: Generate SQL`).
+3. Select your target SQL dialect:
+   - PostgreSQL
+   - MySQL
+   - SQLite
+   - SQL Server
+4. Choose whether to include DROP TABLE statements.
+5. The generated SQL will open in a new editor window.
+
+The SQL generator supports:
+- CREATE TABLE statements with appropriate data types for each dialect
+- Primary keys and unique constraints
+- Foreign key relationships with ON DELETE/ON UPDATE actions
+- NOT NULL and AUTO_INCREMENT/IDENTITY columns
+- Table and column comments (where supported by the dialect)
+- Schema support (except for SQLite)
 
 ## Requirements
 
