@@ -2,7 +2,7 @@
   "name": "noise-dbml",
   "displayName": "NOISE DBML",
   "description": "Visual editor preview for DBML relational diagrams",
-  "version": "7.5.1",
+  "version": "7.5.2",
   "license": "GPL-3.0-only",
   "publisher": "AndrsFelipeMurillo",
   "engines": {
@@ -16,7 +16,7 @@
   "icon": "src/resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anfeh/dbml-diagram-viewer"
+    "url": "https://github.com/anfeMurillo/Noise-DBML"
   },
   "contributes": {
     "commands": [

@@ -50,5 +50,37 @@
 			"}"
 		],
 		"description": "Creates a DBML indexes block"
+	},
+	"DBML One-to-One": {
+		"prefix": "oto",
+		"body": [
+			"Ref: ${1:table1}.${2:column} - ${3:table2}.${4:column}"
+		],
+		"description": "Create a one-to-one reference"
+	},
+	"DBML One-to-Many": {
+		"prefix": "otm",
+		"body": [
+			"Ref: ${1:table1}.${2:column} < ${3:table2}.${4:column}"
+		],
+		"description": "Create a one-to-many reference"
+	},
+	"DBML Many-to-One": {
+		"prefix": "mto",
+		"body": [
+			"Ref: ${1:table1}.${2:column} > ${3:table2}.${4:column}"
+		],
+		"description": "Create a many-to-one reference"
+	},
+	"DBML Many-to-Many": {
+		"prefix": "mtm",
+		"body": [
+			"Table ${1:join_table_name} {",
+			"  ${2:table1}_id integer [ref: > ${3:table1}.id]",
+			"  ${4:table2}_id integer [ref: > ${5:table2}.id]",
+			"  primary key (${2:table1}_id, ${4:table2}_id)",
+			"}"
+		],
+		"description": "Create a many-to-many join table"
 	}
 }
