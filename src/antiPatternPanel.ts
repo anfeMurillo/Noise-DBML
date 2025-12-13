@@ -4,7 +4,7 @@ import { AntiPattern } from './antiPatternDetector';
 export class AntiPatternPanel {
 	private panel: vscode.WebviewPanel | undefined;
 
-	constructor(private readonly extensionUri: vscode.Uri) {}
+	constructor(private readonly extensionUri: vscode.Uri) { }
 
 	public showAntiPatterns(patterns: AntiPattern[]): void {
 		if (this.panel) {
@@ -189,8 +189,8 @@ export class AntiPatternPanel {
 		.tree-item-details {
 			margin-top: 10px;
 			padding: 12px;
-			background-color: var(--vscode-textBlockQuote-background);
-			border-left: 3px solid var(--vscode-textBlockQuote-border);
+			background-color: transparent;
+			border: 1px solid var(--vscode-widget-border); /* Changed from border-left to full border for better definition without background */
 			border-radius: 3px;
 			display: none;
 		}
@@ -333,7 +333,7 @@ export class AntiPatternPanel {
 	private renderSection(title: string, patterns: AntiPattern[], type: 'error' | 'warning' | 'info'): string {
 		const iconClass = `icon-${type}`;
 		const iconSymbol = type === 'error' ? '×' : type === 'warning' ? '⚠' : 'ⓘ';
-		
+
 		return `
 		<div class="section">
 			<div class="section-header" onclick="toggleSection('${type}')">
@@ -350,7 +350,7 @@ export class AntiPatternPanel {
 
 	private renderTreeItem(pattern: AntiPattern, index: number, type: string): string {
 		const itemId = `${type}-${index}`;
-		const location = pattern.tableName 
+		const location = pattern.tableName
 			? (pattern.fieldName ? `Table: ${pattern.tableName}, Field: ${pattern.fieldName}` : `Table: ${pattern.tableName}`)
 			: '';
 
