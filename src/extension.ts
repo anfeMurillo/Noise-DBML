@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { Parser } from '@dbml/core';
 import { DbmlPreviewProvider } from './dbmlPreviewProvider';
 import { DbmlCompletionItemProvider } from './dbmlCompletion';
 import { DbmlDocumentFormatter } from './dbmlFormatter';
@@ -50,6 +51,68 @@ export function activate(context: vscode.ExtensionContext) {
 			if (document.languageId === 'dbml') {
 				void provider.updatePreview(document);
 			}
+		})
+	);
+
+	// Diagnostics
+	const diagnosticCollection = vscode.languages.createDiagnosticCollection('dbml');
+	context.subscriptions.push(diagnosticCollection);
+
+	function refreshDiagnostics(document: vscode.TextDocument, collection: vscode.DiagnosticCollection) {
+		if (document.languageId !== 'dbml') {
+			return;
+		}
+
+		const dbmlContent = document.getText();
+		try {
+			// @ts-ignore
+			Parser.parse(dbmlContent, 'dbml');
+			collection.delete(document.uri);
+		} catch (e: any) {
+			const diagnostics: vscode.Diagnostic[] = [];
+
+			if (e.diags && Array.isArray(e.diags)) {
+				e.diags.forEach((diag: any) => {
+					const start = new vscode.Position(diag.location.start.line - 1, diag.location.start.column - 1);
+					const end = new vscode.Position(diag.location.end.line - 1, diag.location.end.column - 1);
+					const range = new vscode.Range(start, end);
+
+					const diagnostic = new vscode.Diagnostic(
+						range,
+						diag.message,
+						vscode.DiagnosticSeverity.Error
+					);
+					diagnostics.push(diagnostic);
+				});
+			} else if (e.location) {
+				const start = new vscode.Position(e.location.start.line - 1, e.location.start.column - 1);
+				const end = new vscode.Position(e.location.end.line - 1, e.location.end.column - 1);
+				const range = new vscode.Range(start, end);
+				const diagnostic = new vscode.Diagnostic(
+					range,
+					e.message || 'Syntax Error',
+					vscode.DiagnosticSeverity.Error
+				);
+				diagnostics.push(diagnostic);
+			}
+
+			collection.set(document.uri, diagnostics);
+		}
+	}
+
+	if (vscode.window.activeTextEditor) {
+		refreshDiagnostics(vscode.window.activeTextEditor.document, diagnosticCollection);
+	}
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeTextDocument(e => {
+			refreshDiagnostics(e.document, diagnosticCollection);
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.workspace.onDidOpenTextDocument(doc => {
+			refreshDiagnostics(doc, diagnosticCollection);
 		})
 	);
 }
