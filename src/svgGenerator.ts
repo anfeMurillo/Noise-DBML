@@ -202,7 +202,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 	const tableWidth = 380;
 	const fieldHeight = 30;
 	const headerHeight = 40;
-	const tableSpacing = 100;
+	const tableSpacing = 150;
 	const tablesPerRow = 3;
 	const gridSize = 20; // Grid cell size for routing
 	const groups = schema.groups ?? [];

@@ -2720,8 +2720,8 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
 
             function arrangeTablesWithinGroups() {
                 const tableWidth = 250;
-                const horizontalSpacing = 120;
-                const verticalSpacing = 80;
+                const horizontalSpacing = 200;
+                const verticalSpacing = 120;
                 let changed = false;
 
                 tableGroups.forEach(group => {
@@ -2989,7 +2989,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
             }
             
             function resolveCollisions(tablePositions, tableWidth) {
-                const minSpacing = 50;
+                const minSpacing = 100;
                 let hasCollision = true;
                 let iterations = 0;
                 const maxIterations = 100;
@@ -3043,7 +3043,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                 const tableWidth = 250;
                 const fieldHeight = 30;
                 const headerHeight = 40;
-                const spacing = 150;
+                const spacing = 250;
                 
                 // Initialize positions if needed
                 if (!positions || typeof positions !== 'object') {
@@ -3119,7 +3119,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                                     y, 
                                     height 
                                 });
-                                y += height + 100;
+                                y += height + 150;
                             }
                         });
                         x += tableWidth + spacing;
@@ -3184,7 +3184,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                         });
                         
                         // Place remaining tables in a circle
-                        const radius = 450;
+                        const radius = 600;
                         const angleStep = (2 * Math.PI) / (sortedTables.length - 1);
                         
                         for (let i = 1; i < sortedTables.length; i++) {
@@ -3242,7 +3242,7 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
                         if (col >= cols) {
                             col = 0;
                             x = 100;
-                            y += maxHeightInRow + 100;
+                            y += maxHeightInRow + 150;
                             maxHeightInRow = 0;
                         } else {
                             x += tableWidth + spacing;
