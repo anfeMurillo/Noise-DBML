@@ -6,4 +6,6 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Added default configuration to enable format on save for DBML files.
+- Added DBML document formatter for aligning table columns.
 - Initial release

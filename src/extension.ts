@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DbmlPreviewProvider } from './dbmlPreviewProvider';
 import { DbmlCompletionItemProvider } from './dbmlCompletion';
+import { DbmlDocumentFormatter } from './dbmlFormatter';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('DBML Diagram Viewer extension is now active!');
@@ -14,6 +15,14 @@ export function activate(context: vscode.ExtensionContext) {
 			{ language: 'dbml', scheme: 'file' },
 			new DbmlCompletionItemProvider(),
 			'[' // Trigger completion when '[' is typed, though usually snippets trigger on typing prefix
+		)
+	);
+
+	// Register document formatting provider
+	context.subscriptions.push(
+		vscode.languages.registerDocumentFormattingEditProvider(
+			{ language: 'dbml', scheme: 'file' },
+			new DbmlDocumentFormatter()
 		)
 	);
 

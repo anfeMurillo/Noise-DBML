@@ -11,7 +11,9 @@
     "Programming Languages",
     "Visualization"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:dbml"
+  ],
   "main": "./dist/extension.js",
   "icon": "src/resources/icon.png",
   "repository": {
@@ -64,7 +66,12 @@
         "language": "dbml",
         "path": "./snippets/dbml.json"
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "[dbml]": {
+        "editor.formatOnSave": true
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
