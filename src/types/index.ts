@@ -9,11 +9,22 @@ import type { ParsedSchema, ParsedIndex } from '../svgGenerator';
 export { ParsedTable, ParsedField, ParsedRef, ParsedGroup, ParsedIndex, ParsedSchema } from '../svgGenerator';
 
 /**
+ * Metadatos del bloque Project de DBML
+ */
+export interface ProjectMetadata {
+    name: string;
+    database_type?: string;
+    note?: string;
+    [key: string]: any;
+}
+
+/**
  * Resultado de parsing de DBML con metadata adicional
  */
 export interface DbmlParseResult {
     schema: ParsedSchema;
     indexes: ParsedIndex[];
+    project?: ProjectMetadata;
     rawDatabase: any;
 }
 
@@ -24,6 +35,7 @@ export interface DbmlParserOptions {
     stripIndexes?: boolean;
     validateSchema?: boolean;
     cacheKey?: string;
+    force?: boolean;
 }
 
 /**

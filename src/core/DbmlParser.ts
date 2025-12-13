@@ -1,20 +1,14 @@
+
+import { DbmlParseResult, DbmlParserOptions, ProjectMetadata, ParsedSchema } from '../types';
+import { ParsedIndex } from '../svgGenerator';
 import { Parser } from '@dbml/core';
-import { ParsedIndex, ParsedSchema } from '../svgGenerator';
-import { DbmlParseResult, DbmlParserOptions } from '../types';
+import { logger } from '../utils/Logger';
 import { CacheManager } from '../utils/CacheManager';
 import { ErrorHandler, DbmlParseError } from '../utils/ErrorHandler';
-import { logger } from '../utils/Logger';
 
-/**
- * Regex para identificar índices standalone en DBML
- * Formato: Index nombre on tabla (columnas)
- */
-export const STANDALONE_INDEX_REGEX = /^\s*Index\s+([A-Za-z_][A-Za-z0-9_]*)\s+on\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\).*$/gm;
+const STANDALONE_INDEX_REGEX = /Index\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*on\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*\[(.*?)\]/g;
+const PROJECT_BLOCK_REGEX = /Project\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{([^}]*)\}/g;
 
-/**
- * Parser centralizado para contenido DBML
- * Maneja parsing, caché y extracción de características especiales
- */
 export class DbmlParser {
     private static instance: DbmlParser;
     private cache: CacheManager<DbmlParseResult>;
@@ -27,10 +21,7 @@ export class DbmlParser {
         });
     }
 
-    /**
-     * Obtiene la instancia singleton
-     */
-    static getInstance(): DbmlParser {
+    public static getInstance(): DbmlParser {
         if (!DbmlParser.instance) {
             DbmlParser.instance = new DbmlParser();
         }
@@ -38,46 +29,67 @@ export class DbmlParser {
     }
 
     /**
-     * Parsea contenido DBML y retorna schema estructurado
+     * Parsea contenido DBML y retorna el schema estructurado
      */
     async parse(content: string, options: DbmlParserOptions = {}): Promise<DbmlParseResult> {
         const startTime = Date.now();
+        const cacheKey = this.generateCacheKey(content);
 
-        // Generar clave de caché
-        const cacheKey = options.cacheKey || this.generateCacheKey(content);
-
-        // Intentar obtener del caché
-        const cached = this.cache.get(cacheKey);
-        if (cached) {
-            logger.debug('Parser: usando resultado cacheado', 'DbmlParser');
-            return cached;
+        // Verificar caché
+        if (!options.force && this.cache.has(cacheKey)) {
+            logger.debug('Parser: usando resultado en caché', 'DbmlParser');
+            return this.cache.get(cacheKey)!;
         }
 
-        logger.info('Parser: parseando contenido DBML', 'DbmlParser', {
-            contentLength: content.length,
-            stripIndexes: options.stripIndexes
-        });
-
         try {
-            // Extraer índices standalone si es necesario
-            let indexes: ParsedIndex[] = [];
-            let contentToParse = content;
+            logger.info('Parser: parseando contenido DBML', 'DbmlParser', {
+                contentLength: content.length
+            });
 
-            if (options.stripIndexes !== false) {
-                const extraction = this.extractStandaloneIndexes(content);
-                indexes = extraction.indexes;
-                contentToParse = extraction.sanitizedContent;
+            // Preprocesamiento: Extraer índices standalone
+            const { indexes, sanitizedContent: contentWithoutIndexes } = this.extractStandaloneIndexes(content);
 
-                logger.debug(`Parser: extraídos ${indexes.length} índices standalone`, 'DbmlParser');
-            }
+            // Preprocesamiento: Extraer bloque Project
+            const { project: projectMetadata, sanitizedContent: contentToParse } = this.extractProjectBlock(contentWithoutIndexes);
 
-            // Parsear con @dbml/core
+            // Parsear con @dbml/core (con reintentos para recuperación de errores)
             let database: any;
-            try {
-                // @ts-ignore - El tipo de Parser.parse no está bien definido en @dbml/core
-                database = Parser.parse(contentToParse, 'dbml');
-            } catch (parseError: any) {
-                throw ErrorHandler.fromDbmlParseError(parseError);
+            let currentContent = contentToParse;
+            let attempts = 0;
+            const MAX_ATTEMPTS = 5;
+
+            while (true) {
+                try {
+                    // @ts-ignore - El tipo de Parser.parse no está bien definido en @dbml/core
+                    database = Parser.parse(currentContent, 'dbml');
+                    break;
+                } catch (parseError: any) {
+                    attempts++;
+
+                    // Extraer ubicación del error (puede estar en .location o en .diags[0].location)
+                    let errorLocation = parseError.location;
+                    if (!errorLocation && parseError.diags && Array.isArray(parseError.diags) && parseError.diags.length > 0) {
+                        errorLocation = parseError.diags[0].location;
+                    }
+
+                    // Si excedimos intentos o no hay ubicación del error, fallar
+                    if (attempts >= MAX_ATTEMPTS || !errorLocation) {
+                        throw ErrorHandler.fromDbmlParseError(parseError);
+                    }
+
+                    // Intentar reparar el contenido
+                    // Construimos un objeto de error temporal con la ubicación correcta para tryFixParseError
+                    const fixedContent = this.tryFixParseError(currentContent, { location: errorLocation });
+
+                    // Si no se pudo reparar o el contenido no cambió, fallar
+                    if (!fixedContent || fixedContent === currentContent) {
+                        throw ErrorHandler.fromDbmlParseError(parseError);
+                    }
+
+                    // Reintentar con contenido reparado
+                    currentContent = fixedContent;
+                    logger.warn(`Parser: intentando recuperar error de sintaxis en línea ${errorLocation.start.line}`, 'DbmlParser');
+                }
             }
 
             // Convertir a ParsedSchema
@@ -91,6 +103,7 @@ export class DbmlParser {
             const result: DbmlParseResult = {
                 schema,
                 indexes,
+                project: projectMetadata,
                 rawDatabase: database
             };
 
@@ -141,6 +154,82 @@ export class DbmlParser {
         );
 
         return { indexes, sanitizedContent };
+    }
+
+    /**
+     * Extrae bloque Project del contenido DBML
+     */
+    private extractProjectBlock(content: string): {
+        project?: any;
+        sanitizedContent: string;
+    } {
+        let project: any = undefined;
+
+        // Reemplazar bloque Project con líneas vacías (preservar números de línea)
+        const sanitizedContent = content.replace(
+            PROJECT_BLOCK_REGEX,
+            (match, projectName, properties) => {
+                // Parsear propiedades del proyecto
+                project = { name: projectName.trim() };
+
+                // Extraer propiedades del bloque
+                const propLines = properties.split('\n');
+                for (const line of propLines) {
+                    const propMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)\s*$/);
+                    if (propMatch) {
+                        const [, key, value] = propMatch;
+                        // Remover comillas simples o dobles del valor
+                        const cleanValue = value.trim().replace(/^['"]|['"]$/g, '');
+                        project[key.trim()] = cleanValue;
+                    }
+                }
+
+                // Reemplazar con misma cantidad de newlines
+                return '\n'.repeat(match.split('\n').length - 1);
+            }
+        );
+
+        return { project, sanitizedContent };
+    }
+
+    /**
+     * Intenta reparar errores de sintaxis conocidos en una línea específica
+     */
+    private tryFixParseError(content: string, error: any): string | null {
+        try {
+            const lineNum = error.location.start.line;
+            const lines = content.split('\n');
+            const index = lineNum - 1;
+
+            if (index < 0 || index >= lines.length) { return null; }
+
+            let line = lines[index];
+            const originalLine = line;
+
+            // Fix 1: Check constraints (unsupported by @dbml/core)
+            if (line.includes('check:')) {
+                // Remover 'check: value' dentro de brackets, manejando comas
+                line = line.replace(/,\s*check\s*:\s*[^,\]]+/gi, '');
+                line = line.replace(/check\s*:\s*[^,\]]+\s*,?/gi, '');
+            }
+
+            // Fix 2: Backticks in default values (unsupported syntax default: `now()`)
+            // Convert to string: default: `now()` -> default: 'now()'
+            if (line.includes('default:') && line.includes('`')) {
+                line = line.replace(/default:\s*`([^`]+)`/g, "default: '$1'");
+            }
+
+            // Fix 3: Empty brackets cleanup []
+            line = line.replace(/\[\s*\]/g, '');
+
+            if (line === originalLine) { return null; }
+
+            lines[index] = line;
+            return lines.join('\n');
+
+        } catch (e) {
+            return null;
+        }
     }
 
     /**

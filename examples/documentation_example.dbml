@@ -1,0 +1,128 @@
+// Definición del proyecto
+Project EcommerceSystem {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # Sistema de Comercio Electrónico
+    Este es un esquema de base de datos de ejemplo para demostrar la generación de documentación.
+    Incluye usuarios, órdenes, productos y categorías.
+  '''
+}
+
+// Información de usuarios
+Table users {
+  id integer [primary key, increment]
+  username varchar [not null, unique, note: 'Nombre de usuario único para inicio de sesión']
+  email varchar [not null, unique]
+  password_hash varchar [note: 'Hash de la contraseña encriptada']
+  role user_role [default: 'customer', note: 'Rol del usuario en el sistema']
+  created_at timestamp [default: `now()`, note: 'Fecha de registro del usuario']
+  country_code varchar(2) [note: 'Código ISO del país']
+
+  Note: 'Almacena la información de todos los usuarios registrados en la plataforma.'
+}
+
+// Perfiles de usuario adicionales
+Table user_profiles {
+  user_id integer [primary key]
+  full_name varchar
+  bio text [note: 'Biografía corta del usuario']
+  avatar_url varchar
+  birth_date date
+
+  Note: 'Información extendida del perfil del usuario.'
+}
+
+// Estados posibles para una orden
+Enum order_status {
+  created [note: 'Orden creada pero no procesada']
+  processing [note: 'Orden en proceso de pago o empaquetado']
+  shipped [note: 'Orden enviada al cliente']
+  delivered [note: 'Orden entregada exitosamente']
+  cancelled [note: 'Orden cancelada por el usuario o administrador']
+}
+
+// Roles de usuario
+Enum user_role {
+  admin
+  customer
+  support
+}
+
+// Cabecera de órdenes
+Table orders {
+  id integer [primary key, increment]
+  user_id integer [not null, note: 'ID del usuario que realizó la orden']
+  status order_status [default: 'created']
+  total_amount decimal(10, 2) [note: 'Monto total de la orden incluyendo impuestos']
+  created_at timestamp [default: `now()`]
+  
+  Note: '''
+    Tabla central de órdenes.
+    Rastrea el estado y el monto total de las compras.
+  '''
+}
+
+// Detalles de la orden (Items)
+Table order_items {
+  order_id integer
+  product_id integer
+  quantity integer [default: 1]
+  unit_price decimal(10, 2) [note: 'Precio del producto al momento de la compra']
+
+  indexes {
+    (order_id, product_id) [pk]
+  }
+
+  Note: 'Detalle de productos incluidos en cada orden.'
+}
+
+// Catálogo de productos
+Table products {
+  id integer [primary key, increment]
+  name varchar [not null]
+  description text
+  price decimal(10, 2)
+  stock_quantity integer [default: 0]
+  category_id integer
+  is_active boolean [default: true]
+
+  Note: 'Inventario de productos disponibles para la venta.'
+}
+
+// Categorías de productos
+Table categories {
+  id integer [primary key, increment]
+  name varchar [not null]
+  parent_id integer [note: 'Para subcategorías (auto-referencia)']
+
+  Note: 'Jerarquía de categorías para organizar productos.'
+}
+
+// Agrupación de tablas para visualización
+TableGroup user_management {
+  users
+  user_profiles
+}
+
+TableGroup order_processing {
+  orders
+  order_items
+}
+
+TableGroup inventory {
+  products
+  categories
+}
+
+// Relaciones
+Ref: user_profiles.user_id - users.id [delete: cascade]
+
+Ref: orders.user_id > users.id
+
+Ref: order_items.order_id > orders.id [delete: cascade]
+
+Ref: order_items.product_id > products.id
+
+Ref: products.category_id > categories.id
+
+Ref: categories.parent_id > categories.id

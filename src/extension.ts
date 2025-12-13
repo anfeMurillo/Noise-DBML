@@ -152,7 +152,7 @@ async function handleGenerateSql(): Promise<void> {
 		const includeDropStatements = await vscode.window.showQuickPick(
 			[
 				{ label: 'No', value: false },
-				{ label: 'Sí', value: true }
+				{ label: 'Yes', value: true }
 			],
 			{ placeHolder: 'Include DROP TABLE statements?', title: 'Drop Statements' }
 		);
@@ -334,7 +334,7 @@ async function getConnectionString(dbType: SupportedDb): Promise<string | undefi
 			return await vscode.window.showInputBox({
 				prompt: 'Enter SQLite Cloud connection string',
 				ignoreFocusOut: true,
-				placeHolder: 'sqlitecloud://... o https://...'
+				placeHolder: 'sqlitecloud://... or https://...'
 			});
 		}
 	}

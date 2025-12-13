@@ -1,7 +1,7 @@
 import { ErrorType, StructuredError } from '../types';
 
 /**
- * Error base personalizado para la extensión Noise-DBML
+ * Custom base error for Noise-DBML extension
  */
 export class NoiseDbmlError extends Error {
     constructor(
@@ -14,14 +14,14 @@ export class NoiseDbmlError extends Error {
         super(message);
         this.name = 'NoiseDbmlError';
 
-        // Mantener stack trace adecuado
+        // Keep proper stack trace
         if (Error.captureStackTrace) {
             Error.captureStackTrace(this, NoiseDbmlError);
         }
     }
 
     /**
-     * Convierte el error a un objeto estructurado
+     * Converts the error to a structured object
      */
     toStructured(): StructuredError {
         return {
@@ -34,17 +34,17 @@ export class NoiseDbmlError extends Error {
     }
 
     /**
-     * Obtiene un mensaje formateado para mostrar al usuario
+     * Gets a formatted message to show to the user
      */
     getUserMessage(): string {
         let msg = this.message;
 
         if (this.details) {
-            msg += `\n\nDetalles: ${this.details}`;
+            msg += `\n\nDetails: ${this.details}`;
         }
 
         if (this.suggestions && this.suggestions.length > 0) {
-            msg += '\n\nSugerencias:';
+            msg += '\n\nSuggestions:';
             this.suggestions.forEach((s, i) => {
                 msg += `\n${i + 1}. ${s}`;
             });
@@ -55,7 +55,7 @@ export class NoiseDbmlError extends Error {
 }
 
 /**
- * Error de parsing de DBML
+ * DBML parsing error
  */
 export class DbmlParseError extends NoiseDbmlError {
     constructor(
@@ -65,10 +65,10 @@ export class DbmlParseError extends NoiseDbmlError {
         details?: string,
         suggestions?: string[]
     ) {
-        const locationInfo = line !== undefined ? ` (Línea ${line}${column !== undefined ? `, Columna ${column}` : ''})` : '';
+        const locationInfo = line !== undefined ? ` (Line ${line}${column !== undefined ? `, Column ${column}` : ''})` : '';
         super(
             ErrorType.PARSE_ERROR,
-            `Error de parsing DBML${locationInfo}: ${message}`,
+            `DBML parsing error${locationInfo}: ${message}`,
             details,
             suggestions
         );
@@ -77,7 +77,7 @@ export class DbmlParseError extends NoiseDbmlError {
 }
 
 /**
- * Error de validación de esquema
+ * Schema validation error
  */
 export class DbmlValidationError extends NoiseDbmlError {
     constructor(
@@ -86,10 +86,10 @@ export class DbmlValidationError extends NoiseDbmlError {
         public readonly fieldName?: string,
         suggestions?: string[]
     ) {
-        const locationInfo = tableName ? ` en tabla '${tableName}'${fieldName ? `.${fieldName}` : ''}` : '';
+        const locationInfo = tableName ? ` in table '${tableName}'${fieldName ? `.${fieldName}` : ''}` : '';
         super(
             ErrorType.VALIDATION_ERROR,
-            `Error de validación${locationInfo}: ${message}`,
+            `Validation error${locationInfo}: ${message}`,
             undefined,
             suggestions
         );
@@ -98,7 +98,7 @@ export class DbmlValidationError extends NoiseDbmlError {
 }
 
 /**
- * Error de conexión a base de datos
+ * Database connection error
  */
 export class DatabaseConnectionError extends NoiseDbmlError {
     constructor(
@@ -110,7 +110,7 @@ export class DatabaseConnectionError extends NoiseDbmlError {
         const suggestions = DatabaseConnectionError.getSuggestions(dbType, message);
         super(
             ErrorType.CONNECTION_ERROR,
-            `Error de conexión a ${dbType}: ${message}`,
+            `Connection error to ${dbType}: ${message}`,
             undefined,
             suggestions,
             originalError
@@ -122,41 +122,41 @@ export class DatabaseConnectionError extends NoiseDbmlError {
         const suggestions: string[] = [];
 
         if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo')) {
-            suggestions.push('Verifica que el hostname sea correcto');
-            suggestions.push('Asegúrate de tener conexión a internet si es una BD en la nube');
+            suggestions.push('Check that the hostname is correct');
+            suggestions.push('Ensure you have internet connection if it is a cloud DB');
         }
 
         if (errorMessage.includes('ECONNREFUSED')) {
-            suggestions.push('Verifica que el servidor de base de datos esté ejecutándose');
-            suggestions.push('Confirma que el puerto sea el correcto');
-            if (dbType === 'postgres') {suggestions.push('Puerto por defecto: 5432');}
-            if (dbType === 'mysql') {suggestions.push('Puerto por defecto: 3306');}
+            suggestions.push('Check that the database server is running');
+            suggestions.push('Confirm that the port is correct');
+            if (dbType === 'postgres') { suggestions.push('Default port: 5432'); }
+            if (dbType === 'mysql') { suggestions.push('Default port: 3306'); }
         }
 
         if (errorMessage.includes('authentication') || errorMessage.includes('password')) {
-            suggestions.push('Verifica tu usuario y contraseña');
-            suggestions.push('Si la contraseña contiene caracteres especiales, asegúrate de codificarla correctamente');
+            suggestions.push('Check your username and password');
+            suggestions.push('If the password contains special characters, ensure it is correctly encoded');
         }
 
         if (errorMessage.includes('SSL') || errorMessage.includes('ssl')) {
             if (dbType === 'postgres') {
-                suggestions.push('Intenta agregar ?sslmode=require a tu connection string');
-                suggestions.push('Para desarrollo local, usa ?sslmode=disable');
+                suggestions.push('Try adding ?sslmode=require to your connection string');
+                suggestions.push('For local development, use ?sslmode=disable');
             }
             if (dbType === 'mysql') {
-                suggestions.push('Intenta agregar ?ssl=true a tu connection string');
+                suggestions.push('Try adding ?ssl=true to your connection string');
             }
         }
 
         if (errorMessage.includes('does not exist')) {
-            suggestions.push('Verifica que el nombre de la base de datos sea correcto');
-            suggestions.push('Asegúrate de tener permisos para acceder a la base de datos');
+            suggestions.push('Check that the database name is correct');
+            suggestions.push('Ensure you have permissions to access the database');
         }
 
-        // Sugerencias generales
+        // General suggestions
         if (suggestions.length === 0) {
-            suggestions.push('Verifica tu connection string');
-            suggestions.push('Confirma que tienes acceso a la base de datos');
+            suggestions.push('Check your connection string');
+            suggestions.push('Confirm you have access to the database');
         }
 
         return suggestions;
@@ -164,11 +164,11 @@ export class DatabaseConnectionError extends NoiseDbmlError {
 }
 
 /**
- * Manejador centralizado de errores
+ * Centralized error handler
  */
 export class ErrorHandler {
     /**
-     * Convierte cualquier error a NoiseDbmlError
+     * Converts any error to NoiseDbmlError
      */
     static normalize(error: unknown): NoiseDbmlError {
         if (error instanceof NoiseDbmlError) {
@@ -194,36 +194,36 @@ export class ErrorHandler {
 
         return new NoiseDbmlError(
             ErrorType.UNKNOWN_ERROR,
-            'Error desconocido',
+            'Unknown error',
             String(error)
         );
     }
 
     /**
-     * Maneja errores de parsing del @dbml/core
+     * Handles parsing errors from @dbml/core
      */
     static fromDbmlParseError(error: any): DbmlParseError {
         if (error.diags && Array.isArray(error.diags)) {
             const firstDiag = error.diags[0];
             return new DbmlParseError(
-                firstDiag.message || firstDiag.error || 'Error de sintaxis',
+                firstDiag.message || firstDiag.error || 'Syntax error',
                 firstDiag.location?.start?.line,
                 firstDiag.location?.start?.column,
-                error.diags.length > 1 ? `${error.diags.length} errores encontrados` : undefined,
-                ['Revisa la sintaxis DBML', 'Consulta la documentación en https://dbml.dbdiagram.io/docs/']
+                error.diags.length > 1 ? `${error.diags.length} errors found` : undefined,
+                ['Check your DBML syntax', 'Consult documentation at https://dbml.dbdiagram.io/docs/']
             );
         }
 
         if (error.location) {
             return new DbmlParseError(
-                error.message || 'Error de sintaxis',
+                error.message || 'Syntax error',
                 error.location.start?.line,
                 error.location.start?.column
             );
         }
 
         return new DbmlParseError(
-            error.message || 'Error al parsear DBML',
+            error.message || 'Error parsing DBML',
             undefined,
             undefined,
             String(error)
@@ -231,7 +231,7 @@ export class ErrorHandler {
     }
 
     /**
-     * Formatea un error para logging
+     * Formats an error for logging
      */
     static formatForLog(error: unknown): string {
         const normalized = this.normalize(error);
@@ -239,7 +239,7 @@ export class ErrorHandler {
         let formatted = `[${normalized.type}] ${normalized.message}`;
 
         if (normalized.details) {
-            formatted += `\nDetalles: ${normalized.details}`;
+            formatted += `\nDetails: ${normalized.details}`;
         }
 
         if (normalized.originalError?.stack) {

@@ -1,0 +1,26 @@
+// Archivo de ejemplo para configuración del proyecto en DBML
+
+// Configuración del proyecto
+Project project_name {
+  database_type: 'PostgreSQL'
+  note: 'Sistema de gestión de inventario'
+}
+
+// Configuración de tabla
+Table users {
+  id       int         [pk, increment]
+  username varchar(50) [not null]
+}
+
+// Configuración de columna con opciones adicionales
+Table products {
+  id         int           [pk, increment]
+  name       varchar(200)  [not null]
+  price      decimal(10,2) [not null, check: price > 0]
+  created_at timestamp     [default: `CURRENT_TIMESTAMP`]
+}
+
+// Configuración de base de datos
+// Nota: Algunos parsers de DBML soportan configuraciones globales
+// database_type: 'MySQL'
+// schema: 'public'
