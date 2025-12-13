@@ -12,8 +12,7 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onLanguage:dbml",
-    "onCommand:noise-dbml.reverseEngineerDb"
+    "onLanguage:dbml"
   ],
   "main": "./dist/extension.js",
   "icon": "src/resources/icon.png",

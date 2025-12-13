@@ -125,6 +125,24 @@ function mapSqlServerType(sqlType: string): string {
 }
 
 // --- PostgreSQL ---
+function sanitizeDefaultValue(defaultValue: string): string | null {
+  // Remove quotes if present
+  let value = defaultValue.trim();
+  if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+    value = value.slice(1, -1);
+  }
+  // Handle PostgreSQL casting like 'value'::type
+  if (value.includes('::')) {
+    value = value.split('::')[0];
+  }
+  // Skip complex expressions like now(), functions, etc.
+  if (value.includes('(') || value.includes(')') || value.toLowerCase().includes('now') || value.toLowerCase().includes('current')) {
+    return null; // Skip complex defaults
+  }
+  // Escape single quotes for DBML
+  return `'${value.replace(/'/g, "\\'")}'`;
+}
+
 export async function reversePostgres(connStr: string): Promise<string> {
   console.log('Attempting to connect to PostgreSQL with connection string:', connStr.replace(/:[^:]*@/, ':***@')); // Log without password
 
@@ -228,26 +246,33 @@ export async function reversePostgres(connStr: string): Promise<string> {
 
         console.log(`Table ${tableName} has ${columnsResult.rows.length} columns`);
 
+
         for (const col of columnsResult.rows) {
-          let columnDef = `  ${col.column_name} ${mapPostgresType(col.data_type)}`;
-
-          if (col.is_primary_key) {
-            columnDef += ' [pk';
+          let mappedType = mapPostgresType(col.data_type);
+          let typeComment = '';
+          // Si el tipo no es estándar, usar varchar y agregar comentario
+          const standardTypes = [
+            'int', 'bigint', 'smallint', 'float', 'double', 'decimal', 'varchar', 'char', 'text', 'boolean', 'date', 'time', 'timestamp', 'timestamptz', 'json', 'jsonb', 'uuid', 'bytea'
+          ];
+          if (!standardTypes.includes(mappedType)) {
+            typeComment = ` // original type: ${col.data_type}`;
+            mappedType = 'varchar';
           }
-          if (col.is_auto_increment) {
-            columnDef += ', increment';
-          }
-          if (col.is_primary_key) {
-            columnDef += ']';
-          }
-
-          if (col.is_nullable === 'NO') {
-            columnDef += ' [not null]';
-          }
+          let columnDef = `  ${col.column_name} ${mappedType}`;
+          const settings: string[] = [];
+          if (col.is_primary_key) settings.push('pk');
+          if (col.is_auto_increment) settings.push('increment');
+          if (col.is_nullable === 'NO') settings.push('not null');
           if (col.column_default && !col.is_auto_increment) {
-            columnDef += ` [default: ${col.column_default}]`;
+            const sanitizedDefault = sanitizeDefaultValue(col.column_default);
+            if (sanitizedDefault) {
+              settings.push(`default: ${sanitizedDefault}`);
+            }
           }
-
+          if (settings.length > 0) {
+            columnDef += ` [${settings.join(', ')}]`;
+          }
+          columnDef += typeComment;
           dbml += columnDef + '\n';
         }
 
