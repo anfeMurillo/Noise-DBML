@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Parser } from '@dbml/core';
+import { dbmlParser } from './core/DbmlParser';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { generateSvgFromSchema, ParsedSchema, ParsedTable, ParsedField, ParsedRef, ParsedGroup } from './svgGenerator';
@@ -149,8 +149,9 @@ export class DbmlPreviewProvider {
             layoutData = {};
         }
 
+
         const { sanitized, groups } = this.preprocessDbmlContent(dbmlContent);
-        this.panel.webview.html = this.getWebviewContent(sanitized, layoutData, documentPath, groups);
+        this.panel.webview.html = await this.getWebviewContent(sanitized, layoutData, documentPath, groups);
     }
 
     public async updatePreview(document: vscode.TextDocument): Promise<void> {
@@ -421,114 +422,8 @@ export class DbmlPreviewProvider {
         return { sanitizedBody, tableNames, note: noteValue };
     }
 
-    private convertToSchema(database: any, metadataGroups: TableGroupMetadata[], content: string): ParsedSchema {
-        const tables: ParsedTable[] = [];
-        const refs: ParsedRef[] = [];
-        const groups: ParsedGroup[] = [];
-        const metadataLookup = new Map<string, TableGroupMetadata>();
-        metadataGroups.forEach(group => {
-            metadataLookup.set(group.name, group);
-        });
+    // convertToSchema method removed - functionality moved to DbmlParser
 
-        // Extract tables
-        if (database.schemas && database.schemas.length > 0) {
-            const schema = database.schemas[0];
-
-            if (schema.tables) {
-                schema.tables.forEach((table: any) => {
-                    const fields: ParsedField[] = [];
-
-                    if (table.fields) {
-                        table.fields.forEach((field: any) => {
-                            const fieldText = content.substring(field.token.start.offset, field.token.end.offset);
-                            const hasPk = fieldText.includes('[pk]');
-                            const parsedField: ParsedField = {
-                                name: field.name || '',
-                                type: field.type?.type_name || 'unknown',
-                                pk: hasPk || field.pk || false,
-                                unique: field.unique || false,
-                                notNull: field.not_null || false,
-                                increment: field.increment || false,
-                                note: field.note || undefined,
-                                default: field.dbdefault ? {
-                                    type: field.dbdefault.type,
-                                    value: field.dbdefault.value
-                                } : undefined
-                            };
-                            fields.push(parsedField);
-                        });
-                    }
-
-                    let tableNote = table.note || undefined;
-                    let schemaName = 'public';
-
-                    if (tableNote) {
-                        const schemaMatch = tableNote.match(/schema:\s*([a-zA-Z0-9_]+)/i);
-                        if (schemaMatch) {
-                            schemaName = schemaMatch[1];
-                        }
-                    }
-
-                    tables.push({
-                        name: table.name || '',
-                        fields: fields,
-                        note: tableNote,
-                        schema: schemaName
-                    });
-                });
-            }
-
-            // Extract references
-            if (schema.refs) {
-                schema.refs.forEach((ref: any) => {
-                    const endpoints = (ref.endpoints || []).map((ep: any) => ({
-                        tableName: ep.tableName || '',
-                        fieldNames: ep.fieldNames || [],
-                        relation: ep.relation || '1'
-                    }));
-
-                    // Only add references with at least 2 valid endpoints
-                    if (endpoints.length >= 2 && endpoints[0].tableName && endpoints[1].tableName) {
-                        const parsedRef: ParsedRef = {
-                            name: ref.name || undefined,
-                            endpoints: endpoints,
-                            onDelete: ref.onDelete || undefined,
-                            onUpdate: ref.onUpdate || undefined
-                        };
-                        refs.push(parsedRef);
-                    }
-                });
-            }
-
-            if (schema.tableGroups) {
-                schema.tableGroups.forEach((group: any) => {
-                    const groupName = group.name || '';
-                    const tablesInGroup = (group.tables || []).map((table: any) => table?.name || table?.tableName || '').filter((name: string) => name.length > 0);
-                    const metadata = metadataLookup.get(groupName);
-                    groups.push({
-                        name: groupName,
-                        tables: tablesInGroup,
-                        color: metadata?.color,
-                        note: metadata?.note
-                    });
-                });
-            }
-        }
-
-        // Include metadata-defined groups that parser did not return (e.g., empty groups)
-        metadataGroups.forEach(group => {
-            if (!groups.some(existing => existing.name === group.name)) {
-                groups.push({
-                    name: group.name,
-                    tables: group.tables,
-                    color: group.color,
-                    note: group.note
-                });
-            }
-        });
-
-        return { tables, refs, groups };
-    }
 
     private async generateDocumentation(): Promise<void> {
         if (!this.currentDocument) {
@@ -538,13 +433,15 @@ export class DbmlPreviewProvider {
 
         const dbmlContent = this.currentDocument.getText();
         let database;
+        let schema: ParsedSchema;
+
         try {
-            // Preprocess DBML to support multiple attribute brackets
-            const processedContent = dbmlContent.replace(/\]\s*\[/g, ', ');
-            // @ts-ignore
-            database = Parser.parse(processedContent, 'dbml');
-        } catch (e) {
-            vscode.window.showErrorMessage('Failed to parse DBML: ' + e);
+            // Use centralized parser
+            const result = await dbmlParser.parse(dbmlContent, { stripIndexes: true });
+            schema = result.schema;
+            database = result.rawDatabase;
+        } catch (e: any) {
+            vscode.window.showErrorMessage('Failed to parse DBML: ' + (e.message || e));
             return;
         }
 
@@ -557,7 +454,16 @@ export class DbmlPreviewProvider {
             return;
         }
 
-        const schema = this.convertToSchema(database, [], dbmlContent);
+        // Groups handling for documentation - try to extract them if possible
+        const { groups } = this.preprocessDbmlContent(dbmlContent);
+        if (groups.length > 0) {
+            schema.groups = groups.map(g => ({
+                name: g.name,
+                tables: g.tables,
+                color: g.color,
+                note: g.note
+            }));
+        }
         const tablesBySchema = new Map<string, ParsedTable[]>();
 
         schema.tables.forEach(table => {
@@ -1245,20 +1151,23 @@ export class DbmlPreviewProvider {
         return html;
     }
 
-    private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): string {
+    private async getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documentPath: string, groupMetadata: TableGroupMetadata[]): Promise<string> {
         let svgContent = '';
         let errorMessage = '';
 
         try {
-            // Preprocess DBML to support multiple attribute brackets
-            sanitizedDbml = sanitizedDbml.replace(/\]\s*\[/g, ', ');
+            // Parse DBML using centralized parser
+            // We use stripIndexes: true to handle Table indexes {} block which @dbml/core might not fully support or returns as separate entity
+            const { schema } = await dbmlParser.parse(sanitizedDbml, { stripIndexes: true });
 
-            // Parse DBML
-            // @ts-ignore - @dbml/core types are incomplete
-            const database = Parser.parse(sanitizedDbml, 'dbml');
-
-            // Convert parsed database to our schema format
-            const schema = this.convertToSchema(database, groupMetadata, sanitizedDbml);
+            // Apply group metadata from preprocessing
+            // We override/merge groups because DbmlParser might not have captured color/note details from TableGroup blocks (regex based)
+            schema.groups = groupMetadata.map(g => ({
+                name: g.name,
+                tables: g.tables,
+                color: g.color,
+                note: g.note
+            }));
 
             // Generate SVG from schema
             svgContent = generateSvgFromSchema(schema);
