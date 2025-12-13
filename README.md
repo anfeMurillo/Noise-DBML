@@ -4,22 +4,22 @@ Visual Studio Code extension for previewing DBML (Database Markup Language) rela
 
 ## Features
 
-### 📊 Interactive Preview
+### Interactive Preview
 - **Visual Diagram**: Render your DBML code as an interactive entity-relationship diagram.
 - **Interactive Controls**: Pan, zoom, and drag tables to organize your view.
 - **Layout Persistence**: The extension remembers your table positions and layout even after you close VS Code.
 - **Theme Adaptation**: Automatically adapts to your VS Code color theme (Light/Dark/High Contrast).
 
-### 🔍 Diagram Views
+### Diagram Views
 - **Create Views**: Create specific views to focus on a subset of tables.
 - **Manage Views**: Rename or delete views as needed.
 - **Filter Tables**: Select which tables to show in each view for better clarity in large schemas.
 
-### 📝 Documentation & Export
+### Documentation and Export
 - **Documentation Generation**: Generate Markdown documentation for your database schema directly from the preview.
 - **Tooltips**: Hover over fields to see their notes/comments.
 
-### ⚡ Productivity Snippets
+### Productivity Snippets
 Speed up your workflow with built-in snippets:
 - `table`: Create a new table with ID and sample column.
 - `group`: Create a TableGroup.
@@ -98,18 +98,3 @@ Supported relationship types:
 ## Extension Settings
 
 This extension currently does not have any configurable settings.
-
-## Known Issues
-
-- Complex custom colors in DBML might not always render exactly as expected in all themes.
-
-## Release Notes
-
-### 0.0.3
-- Added snippets for `Project`, `Enum`, and `Indexes`.
-- Improved documentation.
-- Added Diagram Views support.
-
----
-
-**Enjoying Noise DBML?** Please consider leaving a review on the Marketplace!
