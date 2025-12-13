@@ -2,6 +2,17 @@
 
 **Complete DBML support for Visual Studio Code** - Design, visualize, and export your database schemas with ease.
 
+[![Version](https://img.shields.io/badge/version-0.0.7-blue.svg)](https://marketplace.visualstudio.com/items?itemName=AndrsFelipeMurillo.noise-dbml)
+[![Visual Studio Marketplace](https://img.shields.io/badge/marketplace-install-blue.svg)](https://marketplace.visualstudio.com/items?itemName=AndrsFelipeMurillo.noise-dbml)
+
+## 🚀 What's New in v0.0.7
+
+- ✨ **Enhanced Documentation**: Comprehensive README with detailed usage guides
+- 🔧 **Improved Reverse Engineering**: Better error handling and connection troubleshooting
+- 🐛 **Bug Fixes**: Fixed SQLite Cloud connection issues
+- 📊 **Better Examples**: More detailed connection string examples for all database types
+- 🧪 **Testing Tools**: Included database connection testing scripts
+
 ## 🌟 Features
 
 ### 📊 Interactive Diagram Preview
@@ -10,8 +21,9 @@ Transform your DBML code into beautiful, interactive entity-relationship diagram
 - **Visual Rendering**: See your database schema as a professional diagram
 - **Drag & Drop**: Organize tables by dragging them around the canvas
 - **Pan & Zoom**: Navigate large schemas with smooth controls
-- **Layout Persistence**: Your table positions are automatically saved
+- **Layout Persistence**: Your table positions are automatically saved per file
 - **Theme-Aware**: Seamlessly adapts to VS Code's light, dark, and high contrast themes
+- **Export to PNG**: Save your diagram as an image file
 
 ### 👁️ Diagram Views
 Create focused views to manage complex database schemas.
@@ -79,10 +91,10 @@ Convert DBML to production-ready SQL scripts for any database:
 Automatically detect design issues and best practice violations:
 
 - **Missing Primary Keys**: Identifies tables without primary keys
-- **Excessive NULL Fields**: Detects tables with too many nullable columns
+- **Excessive NULL Fields**: Detects tables with too many nullable columns (>50%)
 - **Reserved Keywords**: Warns about SQL reserved words in table/field names
 - **Naming Conventions**: Checks for invalid naming patterns
-- **Large Tables**: Flags tables with too many columns
+- **Large Tables**: Flags tables with too many columns (>20)
 - **Circular Dependencies**: Detects mutual table references
 - **Missing Indexes**: Suggests indexes for foreign key fields
 - **Detailed Reports**: Provides clear explanations and recommendations
@@ -93,6 +105,17 @@ Organize and visualize related tables with colored backgrounds.
 - **Visual Grouping**: Tables in the same group share a colored background
 - **Color Options**: Choose from red, blue, green, yellow, orange, or purple
 - **Documentation**: Add notes to describe each group's purpose
+
+### 🔄 Reverse Engineering
+Import existing database schemas into DBML format:
+
+- **PostgreSQL**: Full support with schema detection and SSL handling
+- **MySQL**: Complete table and relationship import
+- **SQLite**: Local database file support and SQLite Cloud
+- **SQL Server**: Enterprise database support
+- **Connection Testing**: Built-in connection validation
+- **Schema Discovery**: Automatic detection of available schemas
+- **Constraint Import**: Primary keys, foreign keys, indexes, and defaults
 
 ## 📖 Quick Start Guide
 
@@ -126,71 +149,159 @@ Ref: posts.user_id > users.id [delete: cascade]
 ### 2. Preview the Diagram
 - Click the **👁️ eye icon** in the editor toolbar, or
 - Press `Ctrl+Shift+P` and run **"Open DBML Preview"**
+- **Drag tables** to reposition them
+- **Scroll** to zoom in/out
+- **Pan** by dragging the background
+- Use the toolbar to create views, generate docs, or export PNG
 
 ### 3. Generate SQL
 - Click the **🗄️ database icon** in the editor toolbar, or
 - Press `Ctrl+Shift+P` and run **"DBML: Generate SQL"**
-- Select your database dialect and options
+- Select your database dialect (PostgreSQL, MySQL, SQLite, SQL Server)
+- Choose options like including DROP statements
+- Review and save the generated SQL
 
-### 4. Reverse Engineer from Database
+### 4. Detect Anti-Patterns
+- Click the **⚠️ warning icon** in the editor toolbar, or
+- Press `Ctrl+Shift+P` and run **"DBML: Detect Anti-Patterns"**
+- Review the detailed report with errors, warnings, and suggestions
+
+### 5. Reverse Engineer from Database
 - Click the **☁️ cloud-download icon** in the editor toolbar, or
 - Press `Ctrl+Shift+P` and run **"DBML: Reverse Engineer from Database"**
 - Select your database type and provide connection details
+- The extension will automatically detect schemas, tables, and relationships
 
 ## 🎯 Usage
 
 ### Reverse Engineering from Database
 
-Import existing database schemas into DBML format:
+Import existing database schemas into DBML format with full support for multiple database types.
 
 #### Supported Databases
-- **PostgreSQL** - Full support with schema detection
-- **MySQL** - Complete table and relationship import
-- **SQLite** - Local database file support
-- **SQL Server** - Enterprise database support
+- **PostgreSQL** - Full support with schema detection, SSL handling, and cloud databases
+- **MySQL** - Complete table and relationship import with constraint detection
+- **SQLite** - Local database files and SQLite Cloud support
+- **SQL Server** - Enterprise database support with schema separation
 
 #### PostgreSQL Connection Examples
 
-**Standard Connection String:**
+**Local PostgreSQL:**
 ```
 postgresql://username:password@localhost:5432/database_name
 ```
 
-**Service URIs (Heroku, Railway, Supabase, etc.):**
+**Cloud Databases (Heroku, Railway, Supabase, etc.):**
 ```
-postgres://username:password@host:5432/database_name
+postgres://username:password@host:5432/database_name?sslmode=require
 ```
 
-**Connection String Format:**
-- `postgresql://user:password@host:port/database`
-- `postgres://user:password@host:port/database`
+**SSL Options:**
+- `?sslmode=require` - Required for most cloud providers
+- `?sslmode=prefer` - Attempts SSL but falls back if unavailable
 
-#### Troubleshooting PostgreSQL Connections
+#### MySQL Connection Examples
 
-If the reverse engineering fails:
+**Standard MySQL:**
+```
+mysql://username:password@localhost:3306/database_name
+```
 
-1. **Test your connection string** using the provided test script:
-   ```bash
-   node test-postgres-connection.js "your-connection-string"
-   ```
+**Cloud MySQL (AWS RDS, Google Cloud SQL, etc.):**
+```
+mysql://username:password@host:3306/database_name?ssl=true
+```
 
-2. **Common issues:**
-   - **SSL requirements**: Some cloud providers require SSL. Try adding `?sslmode=require` to your connection string
-   - **Schema permissions**: Ensure your user has access to `information_schema` tables
-   - **Empty schemas**: The tool searches multiple schemas if `public` is empty
-   - **Connection timeouts**: Cloud databases may need longer timeouts
+#### SQLite Options
 
-3. **For cloud databases**, try these variations:
-   - Heroku: `postgresql://user:pass@host:5432/dbname?sslmode=require`
-   - Supabase: Use the connection string from your project settings
-   - Railway: Use the DATABASE_URL environment variable value
+**Local SQLite File:**
+- Select "SQLite" → "Local File" and choose your `.db`, `.sqlite`, or `.sqlite3` file
 
-The reverse engineering will automatically detect:
-- All accessible schemas
-- Tables with columns, types, and constraints
-- Primary keys and auto-increment fields
-- Foreign key relationships
-- Default values and nullability
+**SQLite Cloud:**
+- Select "SQLite" → "Online (SQLite Cloud)"
+- Use connection strings like:
+  ```
+  sqlitecloud://username:password@host:8860/database
+  https://your-project.sqlite.cloud/database
+  ```
+
+#### SQL Server Connection Examples
+
+**Standard SQL Server:**
+```
+sqlserver://username:password@host:1433/database_name
+```
+
+**Azure SQL Database:**
+```
+sqlserver://username:password@server.database.windows.net:1433/database_name?encrypt=true
+```
+
+#### Connection Troubleshooting
+
+**PostgreSQL Issues:**
+- **SSL Required**: Add `?sslmode=require` for cloud databases
+- **Schema Access**: Ensure user has `information_schema` permissions
+- **Empty Results**: Tool searches multiple schemas if `public` is empty
+
+**MySQL Issues:**
+- **SSL Settings**: Use `?ssl=true` for cloud instances
+- **Authentication**: Check if password contains special characters
+
+**SQLite Issues:**
+- **File Permissions**: Ensure read access to local database files
+- **Cloud Connection**: Verify SQLite Cloud credentials and endpoint
+
+**General Issues:**
+- **Firewall**: Ensure database port is accessible
+- **Timeouts**: Cloud databases may need longer connection timeouts
+- **Test First**: Use the included test scripts to validate connections
+
+#### What Gets Imported
+
+The reverse engineering automatically detects and imports:
+- ✅ All accessible database schemas
+- ✅ Tables with columns, data types, and constraints
+- ✅ Primary keys and auto-increment fields
+- ✅ Foreign key relationships with cascade actions
+- ✅ Unique constraints and indexes
+- ✅ Default values and nullability settings
+- ✅ Table and column comments (where supported)
+
+## 🧪 Testing & Validation Tools
+
+The extension includes built-in testing tools to help you validate database connections before reverse engineering:
+
+### PostgreSQL Connection Tester
+Test your PostgreSQL connections with detailed diagnostics:
+
+```bash
+# Test connection and get detailed information
+node test-postgres-connection.js "postgresql://user:pass@host:5432/db"
+
+# Test and generate DBML (requires manual DBML generation)
+node test-postgres-connection.js "postgresql://user:pass@host:5432/db" --generate-dbml
+```
+
+**What it tests:**
+- ✅ Database connectivity
+- ✅ SSL configuration
+- ✅ Schema access permissions
+- ✅ Available tables and schemas
+- ✅ Connection string validation
+
+### SQLite Testing
+```bash
+# Test reverse engineering from SQLite file
+node test-reverse-sqlite.js /path/to/database.db
+```
+
+### Included Test Files
+- `test-postgres-connection.js` - PostgreSQL connection validator
+- `test-reverse-postgres.js` - PostgreSQL reverse engineering test
+- `test-reverse-sqlite.js` - SQLite reverse engineering test
+- `test-user-dbml.dbml` - Sample DBML file for testing
+- `examples/anti-patterns-demo.dbml` - Anti-patterns demonstration
 
 ### Visual Preview
 1. Open any `.dbml` file
@@ -478,23 +589,40 @@ The SQL generator supports:
 - Large schemas (50+ tables) work best with **custom views**
 - Use **format on save** to keep code clean automatically
 
-## 🐛 Troubleshooting
+## 🧪 Testing & Validation Tools
 
-### DBML Parse Errors
-- Check for **duplicate references** (inline `[ref:]` and `Ref:` blocks)
-- Ensure **table names are unique**
-- Verify **field types are valid**
-- Check **syntax** in the Problems panel
+The extension includes built-in testing tools to help you validate database connections before reverse engineering:
 
-### SQL Generation Errors
-- Make sure your **DBML has no syntax errors** first
-- Verify **referenced tables exist** in your schema
-- Check that **field names match** between related tables
+### PostgreSQL Connection Tester
+Test your PostgreSQL connections with detailed diagnostics:
 
-### Preview Not Updating
-- **Save the file** (Ctrl+S) to trigger preview update
-- Close and **reopen the preview** panel
-- Check the **Output panel** for error messages
+```bash
+# Test connection and get detailed information
+node test-postgres-connection.js "postgresql://user:pass@host:5432/db"
+
+# Test and generate DBML (requires manual DBML generation)
+node test-postgres-connection.js "postgresql://user:pass@host:5432/db" --generate-dbml
+```
+
+**What it tests:**
+- ✅ Database connectivity
+- ✅ SSL configuration
+- ✅ Schema access permissions
+- ✅ Available tables and schemas
+- ✅ Connection string validation
+
+### SQLite Testing
+```bash
+# Test reverse engineering from SQLite file
+node test-reverse-sqlite.js /path/to/database.db
+```
+
+### Included Test Files
+- `test-postgres-connection.js` - PostgreSQL connection validator
+- `test-reverse-postgres.js` - PostgreSQL reverse engineering test
+- `test-reverse-sqlite.js` - SQLite reverse engineering test
+- `test-user-dbml.dbml` - Sample DBML file for testing
+- `examples/anti-patterns-demo.dbml` - Anti-patterns demonstration
 
 ## 🔗 Useful Resources
 

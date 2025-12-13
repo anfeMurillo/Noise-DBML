@@ -1,7 +1,0 @@
-Table needed_ingredients {
-  dish_id int [pk]
-  ingredient_id varchar [pk]
-  needed_quantity float
-  unit varchar
-  is_optional int [not null] [default: 0]
-}
