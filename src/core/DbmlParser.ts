@@ -52,9 +52,12 @@ export class DbmlParser {
             // Preprocesamiento: Extraer bloque Project
             const { project: projectMetadata, sanitizedContent: contentToParse } = this.extractProjectBlock(contentWithoutIndexes);
 
+            // Preprocesamiento: Reemplazar """ con ''' en notas para compatibilidad
+            const processedContent = contentToParse.replace(/note:\s*"""([\s\S]*?)"""/gi, "note: '''$1'''");
+
             // Parsear con @dbml/core (con reintentos para recuperación de errores)
             let database: any;
-            let currentContent = contentToParse;
+            let currentContent = processedContent;
             let attempts = 0;
             const MAX_ATTEMPTS = 5;
 
@@ -249,9 +252,20 @@ export class DbmlParser {
                 // Procesar tablas
                 if (dbSchema.tables && Array.isArray(dbSchema.tables)) {
                     for (const table of dbSchema.tables) {
+                        let schemaName = dbSchema.name !== 'public' ? dbSchema.name : undefined;
+
+                        // Check for schema definition in note
+                        if (table.note) {
+                            // Match schema: value, schema: "value", or schema: 'value'
+                            const schemaMatch = table.note.match(/schema\s*:\s*(?:["']([^"']+)["']|([^\s]+))/i);
+                            if (schemaMatch) {
+                                schemaName = schemaMatch[1] || schemaMatch[2];
+                            }
+                        }
+
                         schema.tables.push({
                             name: table.name,
-                            schema: dbSchema.name !== 'public' ? dbSchema.name : undefined,
+                            schema: schemaName,
                             fields: this.convertFields(table.fields || []),
                             note: table.note
                         });

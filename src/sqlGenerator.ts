@@ -5,17 +5,28 @@ export interface SqlGenerationOptions {
     includeDropStatements?: boolean;
     includeIfNotExists?: boolean;
     indentSize?: number;
+    separateBySchema?: boolean;
 }
 
 const DEFAULT_OPTIONS: Required<SqlGenerationOptions> = {
     dialect: 'postgresql',
     includeDropStatements: false,
     includeIfNotExists: true,
-    indentSize: 2
+    indentSize: 2,
+    separateBySchema: false
 };
 
-export function generateSql(schema: ParsedSchema, options?: SqlGenerationOptions): string {
+export function generateSql(schema: ParsedSchema, options?: SqlGenerationOptions): string | Map<string, string> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+
+    if (opts.separateBySchema) {
+        return generateSqlSeparatedBySchema(schema, opts);
+    }
+
+    return generateSqlCombined(schema, opts);
+}
+
+function generateSqlCombined(schema: ParsedSchema, opts: Required<SqlGenerationOptions>): string {
     const sqlStatements: string[] = [];
 
     // Header comment
@@ -28,17 +39,29 @@ export function generateSql(schema: ParsedSchema, options?: SqlGenerationOptions
     if (opts.includeDropStatements) {
         sqlStatements.push('-- Drop tables');
         const reversedTables = [...schema.tables].reverse();
-        for (const table of reversedTables) {
-            sqlStatements.push(generateDropTableStatement(table, opts));
+        const tablesBySchema = groupTablesBySchema(reversedTables);
+        for (const [schemaName, tables] of tablesBySchema) {
+            if (schemaName) {
+                sqlStatements.push(`-- Schema: ${schemaName}`);
+            }
+            for (const table of tables) {
+                sqlStatements.push(generateDropTableStatement(table, opts));
+            }
         }
         sqlStatements.push('');
     }
 
     // Generate CREATE TABLE statements
     sqlStatements.push('-- Create tables');
-    for (const table of schema.tables) {
-        sqlStatements.push(generateCreateTableStatement(table, opts));
-        sqlStatements.push('');
+    const tablesBySchema = groupTablesBySchema(schema.tables);
+    for (const [schemaName, tables] of tablesBySchema) {
+        if (schemaName) {
+            sqlStatements.push(`-- Schema: ${schemaName}`);
+        }
+        for (const table of tables) {
+            sqlStatements.push(generateCreateTableStatement(table, opts));
+            sqlStatements.push('');
+        }
     }
 
     // Generate foreign key constraints
@@ -73,6 +96,87 @@ export function generateSql(schema: ParsedSchema, options?: SqlGenerationOptions
     }
 
     return sqlStatements.join('\n');
+}
+
+function generateSqlSeparatedBySchema(schema: ParsedSchema, opts: Required<SqlGenerationOptions>): Map<string, string> {
+    const files = new Map<string, string>();
+    const tablesBySchema = groupTablesBySchema(schema.tables);
+
+    // Generate a file for each schema
+    for (const [schemaName, tables] of tablesBySchema) {
+        const sqlStatements: string[] = [];
+
+        // Header
+        sqlStatements.push('-- Generated SQL from DBML');
+        sqlStatements.push(`-- Dialect: ${opts.dialect}`);
+        sqlStatements.push(`-- Schema: ${schemaName || 'default'}`);
+        sqlStatements.push(`-- Generated at: ${new Date().toISOString()}`);
+        sqlStatements.push('');
+
+        // Generate DROP statements if requested
+        if (opts.includeDropStatements) {
+            sqlStatements.push('-- Drop tables');
+            const reversedTables = tables.reverse();
+            for (const table of reversedTables) {
+                sqlStatements.push(generateDropTableStatement(table, opts));
+            }
+            sqlStatements.push('');
+        }
+
+        // Generate CREATE TABLE statements
+        sqlStatements.push('-- Create tables');
+        for (const table of tables) {
+            sqlStatements.push(generateCreateTableStatement(table, opts));
+            sqlStatements.push('');
+        }
+
+        // Add table comments if supported
+        if (opts.dialect !== 'sqlite') {
+            const commentStatements = generateTableComments(tables, opts);
+            if (commentStatements) {
+                sqlStatements.push('-- Add table and column comments');
+                sqlStatements.push(commentStatements);
+            }
+        }
+
+        const fileName = schemaName ? `schema_${schemaName}.sql` : 'schema_default.sql';
+        files.set(fileName, sqlStatements.join('\n'));
+    }
+
+    // Generate global file for foreign keys and indexes
+    const globalStatements: string[] = [];
+    globalStatements.push('-- Generated SQL from DBML - Global constraints and indexes');
+    globalStatements.push(`-- Dialect: ${opts.dialect}`);
+    globalStatements.push(`-- Generated at: ${new Date().toISOString()}`);
+    globalStatements.push('');
+
+    // Foreign keys
+    if (schema.refs && schema.refs.length > 0) {
+        globalStatements.push('-- Create foreign key constraints');
+        for (const ref of schema.refs) {
+            const fkStatements = generateForeignKeyStatements(ref, opts);
+            if (fkStatements) {
+                globalStatements.push(fkStatements);
+                globalStatements.push('');
+            }
+        }
+    }
+
+    // Indexes
+    if (schema.indexes && schema.indexes.length > 0) {
+        const indexStatements = generateIndexes(schema.indexes, opts);
+        if (indexStatements) {
+            globalStatements.push('-- Create indexes');
+            globalStatements.push(indexStatements);
+            globalStatements.push('');
+        }
+    }
+
+    if (globalStatements.length > 4) { // More than just header
+        files.set('global_constraints.sql', globalStatements.join('\n'));
+    }
+
+    return files;
 }
 
 function generateDropTableStatement(table: ParsedTable, opts: Required<SqlGenerationOptions>): string {
@@ -457,4 +561,16 @@ function generateIndexes(indexes: ParsedIndex[], opts: Required<SqlGenerationOpt
     }
 
     return statements.join('\n');
+}
+
+function groupTablesBySchema(tables: ParsedTable[]): Map<string | undefined, ParsedTable[]> {
+    const groups = new Map<string | undefined, ParsedTable[]>();
+    for (const table of tables) {
+        const schema = table.schema;
+        if (!groups.has(schema)) {
+            groups.set(schema, []);
+        }
+        groups.get(schema)!.push(table);
+    }
+    return groups;
 }

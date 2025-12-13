@@ -8,6 +8,8 @@ import { generateSql, SqlGenerationOptions } from './sqlGenerator';
 import { AntiPatternDetector } from './antiPatternDetector';
 import { AntiPatternPanel } from './antiPatternPanel';
 import { dbmlParser } from './core/DbmlParser';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { logger, LogLevel } from './utils/Logger';
 import { ErrorHandler } from './utils/ErrorHandler';
 import { Validators } from './utils/Validators';
@@ -161,6 +163,19 @@ async function handleGenerateSql(): Promise<void> {
 			return;
 		}
 
+		// Ask for saving to docs folder
+		const saveToDocsFolder = await vscode.window.showQuickPick(
+			[
+				{ label: 'Open in editor', value: false },
+				{ label: 'Save to docs folder', value: true }
+			],
+			{ placeHolder: 'How to output the SQL?', title: 'Output Method' }
+		);
+
+		if (saveToDocsFolder === undefined) {
+			return;
+		}
+
 		// Parse DBML using centralized parser
 		const { schema, indexes } = await dbmlParser.parse(editor!.document.getText(), {
 			stripIndexes: true,
@@ -174,19 +189,51 @@ async function handleGenerateSql(): Promise<void> {
 			dialect: dialect.value,
 			includeDropStatements: includeDropStatements.value,
 			includeIfNotExists: true,
-			indentSize: 2
+			indentSize: 2,
+			separateBySchema: saveToDocsFolder.value
 		};
 
-		const sqlContent = generateSql(schema, options);
+		const sqlResult = generateSql(schema, options);
 
-		// Create new document
-		const doc = await vscode.workspace.openTextDocument({
-			content: sqlContent,
-			language: 'sql'
-		});
+		if (saveToDocsFolder.value) {
+			   // Save to engine-named folder in workspace root
+			   const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor!.document.uri);
+			   if (!workspaceFolder) {
+				   vscode.window.showErrorMessage('No workspace folder found');
+				   return;
+			   }
 
-		await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
-		vscode.window.showInformationMessage('SQL generated successfully');
+			   const engineFolder = path.join(workspaceFolder.uri.fsPath, dialect.value);
+
+			   // Remove existing engine folder (to avoid leaving obsolete files)
+			   try {
+				   await fs.rm(engineFolder, { recursive: true, force: true });
+			   } catch (e) {
+				   // Ignore if doesn't exist
+			   }
+
+			   // Create engine folder
+			   await fs.mkdir(engineFolder, { recursive: true });
+
+			   // Write files
+			   const sqlFiles = sqlResult as Map<string, string>;
+			   for (const [fileName, content] of sqlFiles) {
+				   const filePath = path.join(engineFolder, fileName);
+				   await fs.writeFile(filePath, content, 'utf8');
+			   }
+
+			   vscode.window.showInformationMessage(`SQL files generated in '${dialect.value}' folder (${sqlFiles.size} files)`);
+		} else {
+			// Open in editor
+			const sqlContent = sqlResult as string;
+			const doc = await vscode.workspace.openTextDocument({
+				content: sqlContent,
+				language: 'sql'
+			});
+
+			await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+			vscode.window.showInformationMessage('SQL generated successfully');
+		}
 		logger.info('SQL generated successfully', 'GenerateSQL');
 
 	} catch (error: any) {
