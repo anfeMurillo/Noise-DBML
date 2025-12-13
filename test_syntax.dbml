@@ -1,0 +1,166 @@
+// Ejemplo de DBML con muchas tablas - Sistema de Gestión Universitaria
+
+Table users {
+    id            int                                   [pk, increment]
+    username      varchar(50)                           [unique, not null]
+    email         varchar(100)                          [unique, not null]
+    password_hash varchar(255)                          [not null]
+    role          enum('student', 'professor', 'admin') [not null]
+    created_at    timestamp                             [default: `now()`]
+    updated_at    timestamp                             [default: `now()`]
+}
+
+Table students {
+    id              int         [pk, increment]
+    user_id         int         [ref: > users.id]
+    first_name      varchar(50) [not null]
+    last_name       varchar(50) [not null]
+    date_of_birth   date
+    enrollment_year year
+    major           varchar(100)
+    gpa             decimal(3,2)
+}
+
+Table professors {
+    id              int         [pk, increment]
+    user_id         int         [ref: > users.id]
+    first_name      varchar(50) [not null]
+    last_name       varchar(50) [not null]
+    department      varchar(100)
+    hire_date       date
+    salary          decimal(10,2)
+    office_location varchar(100)
+}
+
+Table departments {
+    id                int          [pk, increment]
+    name              varchar(100) [unique, not null]
+    head_professor_id int          [ref: > professors.id]
+    budget            decimal(15,2)
+    location          varchar(100)
+}
+
+Table courses {
+    id            int          [pk, increment]
+    code          varchar(20)  [unique, not null]
+    name          varchar(200) [not null]
+    description   text
+    credits       int          [not null]
+    department_id int          [ref: > departments.id]
+    professor_id  int          [ref: > professors.id]
+    semester      enum('fall', 'spring', 'summer')
+    year          year
+}
+
+Table enrollments {
+    id              int  [pk, increment]
+    student_id      int  [ref: > students.id]
+    course_id       int  [ref: > courses.id]
+    enrollment_date date [default: `now()`]
+    grade           varchar(2)
+    status          enum('enrolled', 'dropped', 'completed')
+}
+
+Table classrooms {
+    id          int         [pk, increment]
+    building    varchar(50) [not null]
+    room_number varchar(20) [not null]
+    capacity    int
+    equipment   text
+}
+
+Table schedules {
+    id           int [pk, increment]
+    course_id    int [ref: > courses.id]
+    classroom_id int [ref: > classrooms.id]
+    day_of_week  enum('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+    start_time   time
+    end_time     time
+}
+
+Table assignments {
+    id          int          [pk, increment]
+    course_id   int          [ref: > courses.id]
+    title       varchar(200) [not null]
+    description text
+    due_date    datetime
+    max_points  int
+    weight      decimal(5,2)
+}
+
+Table submissions {
+    id              int      [pk, increment]
+    assignment_id   int      [ref: > assignments.id]
+    student_id      int      [ref: > students.id]
+    submission_date datetime [default: `now()`]
+    file_path       varchar(500)
+    grade           int
+    feedback        text
+}
+
+Table library_books {
+    id               int          [pk, increment]
+    isbn             varchar(20)  [unique]
+    title            varchar(300) [not null]
+    author           varchar(200)
+    publisher        varchar(100)
+    publication_year year
+    category         varchar(100)
+    available_copies int          [default: 1]
+    total_copies     int          [not null]
+}
+
+Table book_loans {
+    id          int          [pk, increment]
+    book_id     int          [ref: > library_books.id]
+    student_id  int          [ref: > students.id]
+    loan_date   date         [default: `now()`]
+    due_date    date
+    return_date date
+    fine        decimal(5,2) [default: 0]
+}
+
+Table financial_aid {
+    id            int [pk, increment]
+    student_id    int [ref: > students.id]
+    aid_type      enum('scholarship', 'grant', 'loan', 'work_study')
+    amount        decimal(10,2)
+    academic_year year
+    awarded_date  date
+    description   text
+}
+
+Table research_projects {
+    id                int          [pk, increment]
+    title             varchar(300) [not null]
+    description       text
+    lead_professor_id int          [ref: > professors.id]
+    start_date        date
+    end_date          date
+    funding_amount    decimal(15,2)
+    status            enum('active', 'completed', 'cancelled')
+}
+
+Table project_participants {
+    id             int [pk, increment]
+    project_id     int [ref: > research_projects.id]
+    participant_id int [ref: > users.id] // Can be student or professor
+    role           varchar(100)
+    join_date      date
+    contribution   text
+}
+
+// Indexes for performance
+Index users_email_idx on users (email)
+Index students_user_id_idx on students (user_id)
+Index professors_user_id_idx on professors (user_id)
+Index courses_department_id_idx on courses (department_id)
+Index enrollments_student_id_idx on enrollments (student_id)
+Index enrollments_course_id_idx on enrollments (course_id)
+Index schedules_course_id_idx on schedules (course_id)
+Index assignments_course_id_idx on assignments (course_id)
+Index submissions_assignment_id_idx on submissions (assignment_id)
+Index book_loans_student_id_idx on book_loans (student_id)
+Index financial_aid_student_id_idx on financial_aid (student_id)
+Index research_projects_lead_professor_id_idx on research_projects (lead_professor_id)
+Index project_participants_project_id_idx on project_participants (project_id)

@@ -23,7 +23,7 @@ Choose your target database system:
 - **PostgreSQL** - Industry standard open-source RDBMS
 - **MySQL** - Popular open-source database
 - **SQLite** - Lightweight embedded database
-- **SQL Server** - Microsoft's enterprise database system
+
 
 ### Step 4: Configure Options
 Choose whether to include DROP TABLE statements:
@@ -84,11 +84,7 @@ COMMENT ON COLUMN "users"."username" IS 'Unique username for login';
 - `AUTOINCREMENT` keyword
 - Limited constraint support
 
-### SQL Server
-- Uses `IDENTITY(1,1)` for auto-increment
-- Square bracket identifiers ([table_name])
-- `BIT` type for boolean
-- Comments via extended properties
+
 
 ## Example: Full Workflow
 
@@ -146,7 +142,7 @@ COMMENT ON TABLE "users" IS 'Application users';
 1. **Test in Development First**: Always test generated SQL in a development environment before production
 2. **Review Foreign Keys**: Check that ON DELETE/ON UPDATE behaviors match your requirements
 3. **Adjust Data Types**: Review generated data types and adjust if needed for your specific use case
-4. **Schema Support**: Use PostgreSQL or SQL Server if you need multiple schemas
+4. **Schema Support**: Use PostgreSQL if you need multiple schemas
 5. **Version Control**: Save generated SQL files in your version control system
 
 ## Troubleshooting

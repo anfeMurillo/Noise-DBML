@@ -37,10 +37,18 @@ export interface ParsedGroup {
 	note?: string;
 }
 
+export interface ParsedIndex {
+	name: string;
+	tableName: string;
+	columns: string; // The content inside parentheses
+	unique?: boolean; // If we parse it
+}
+
 export interface ParsedSchema {
 	tables: ParsedTable[];
 	refs: ParsedRef[];
 	groups?: ParsedGroup[];
+	indexes?: ParsedIndex[];
 }
 
 function escapeXml(value: unknown): string {
@@ -73,13 +81,13 @@ function calculateBestConnectionSides(fromX: number, fromY: number, fromWidth: n
 		// Left to Right
 		{ fromSide: 'left' as const, toSide: 'right' as const, fromPoint: fromX, toPoint: toX + toWidth },
 	];
-	
+
 	// Calculate Manhattan distance for each option
 	const optionsWithDistance = options.map(opt => {
 		const dx = Math.abs(opt.toPoint - opt.fromPoint);
 		const dy = Math.abs(toY - fromY);
 		const distance = dx + dy;
-		
+
 		// Penalize connections that go backwards (less intuitive)
 		let penalty = 0;
 		if (opt.fromSide === 'right' && opt.toPoint < opt.fromPoint) {
@@ -87,32 +95,32 @@ function calculateBestConnectionSides(fromX: number, fromY: number, fromWidth: n
 		} else if (opt.fromSide === 'left' && opt.toPoint > opt.fromPoint) {
 			penalty = 200; // Going backwards to the right
 		}
-		
+
 		return { ...opt, distance: distance + penalty };
 	});
-	
+
 	// Choose the option with shortest distance
-	const best = optionsWithDistance.reduce((best, current) => 
+	const best = optionsWithDistance.reduce((best, current) =>
 		current.distance < best.distance ? current : best
 	);
-	
+
 	return { fromSide: best.fromSide, toSide: best.toSide };
 }
 
 // Calculate orthogonal path with stub segments to prevent edge alignment
 function calculateOrthogonalPath(
-	startX: number, startY: number, stubStartX: number, 
-	endX: number, endY: number, stubEndX: number, 
+	startX: number, startY: number, stubStartX: number,
+	endX: number, endY: number, stubEndX: number,
 	gridSize: number, radius: number,
 	fromTableX: number, fromTableY: number, fromTableHeight: number,
 	toTableX: number, toTableY: number, toTableHeight: number,
 	tableWidth: number
 ): string {
 	let path = `M ${startX} ${startY}`;
-	
+
 	// First horizontal stub from table edge
 	path += ` L ${stubStartX} ${startY}`;
-	
+
 	// Calculate preferred horizontal grid line
 	// Snap to nearest grid line to ensure horizontal segments follow the grid
 	const midY = Math.round(endY / gridSize) * gridSize;
@@ -122,40 +130,40 @@ function calculateOrthogonalPath(
 	const fromTableBottom = fromTableY + fromTableHeight;
 	const toTableRight = toTableX + tableWidth;
 	const toTableBottom = toTableY + toTableHeight;
-	
+
 	// Check if vertical segments would pass through tables
 	const stubStartPassesFromTable = stubStartX >= fromTableX && stubStartX <= fromTableRight;
 	const stubStartPassesToTable = stubStartX >= toTableX && stubStartX <= toTableRight;
 	const stubEndPassesFromTable = stubEndX >= fromTableX && stubEndX <= fromTableRight;
 	const stubEndPassesToTable = stubEndX >= toTableX && stubEndX <= toTableRight;
-	
+
 	// Determine if we need to route around tables
 	// Check if any vertical segment would cross through a table's Y range
 	// We consider the path startY -> midY -> endY
 	const minY = Math.min(startY, endY, midY);
 	const maxY = Math.max(startY, endY, midY);
-	
+
 	let needsReroute = false;
 	let intermediateY = 0;
-	
+
 	// Check stubStartX against fromTable
 	if (stubStartPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
 		needsReroute = true;
 		intermediateY = Math.max(intermediateY, fromTableBottom + gridSize);
 	}
-	
+
 	// Check stubStartX against toTable
 	if (stubStartPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
 		needsReroute = true;
 		intermediateY = Math.max(intermediateY, toTableBottom + gridSize);
 	}
-	
+
 	// Check stubEndX against fromTable
 	if (stubEndPassesFromTable && !(maxY < fromTableY || minY > fromTableBottom)) {
 		needsReroute = true;
 		intermediateY = Math.max(intermediateY, fromTableBottom + gridSize);
 	}
-	
+
 	// Check stubEndX against toTable
 	if (stubEndPassesToTable && !(maxY < toTableY || minY > toTableBottom)) {
 		needsReroute = true;
@@ -165,21 +173,21 @@ function calculateOrthogonalPath(
 	// Check horizontal segment at midY (from stubStartX to stubEndX)
 	const minStubX = Math.min(stubStartX, stubEndX);
 	const maxStubX = Math.max(stubStartX, stubEndX);
-	
+
 	// Check if horizontal segment crosses fromTable
-	if (midY >= fromTableY - 5 && midY <= fromTableBottom + 5 && 
+	if (midY >= fromTableY - 5 && midY <= fromTableBottom + 5 &&
 		maxStubX > fromTableX && minStubX < fromTableRight) {
 		needsReroute = true;
 		intermediateY = Math.max(intermediateY, fromTableBottom + gridSize);
 	}
-	
+
 	// Check if horizontal segment crosses toTable
-	if (midY >= toTableY - 5 && midY <= toTableBottom + 5 && 
+	if (midY >= toTableY - 5 && midY <= toTableBottom + 5 &&
 		maxStubX > toTableX && minStubX < toTableRight) {
 		needsReroute = true;
 		intermediateY = Math.max(intermediateY, toTableBottom + gridSize);
 	}
-	
+
 	if (needsReroute) {
 		// Snap intermediateY to grid
 		intermediateY = Math.ceil(intermediateY / gridSize) * gridSize;
@@ -195,14 +203,14 @@ function calculateOrthogonalPath(
 		path += ` L ${stubEndX} ${midY}`;
 		path += ` L ${stubEndX} ${endY}`;
 	}
-	
+
 	// Final horizontal stub to table edge
 	path += ` L ${endX} ${endY}`;
-	
+
 	return path;
 }
 
-export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<string, {x: number, y: number}>): string {
+export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<string, { x: number, y: number }>): string {
 	const tableWidth = 380;
 	const fieldHeight = 30;
 	const headerHeight = 40;
@@ -218,12 +226,12 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			}
 		});
 	});
-	
+
 	// Calculate positions for tables
-	const tablePositions: Array<{table: ParsedTable, x: number, y: number, height: number}> = [];
+	const tablePositions: Array<{ table: ParsedTable, x: number, y: number, height: number }> = [];
 	schema.tables.forEach((table, index) => {
 		let x: number, y: number;
-		
+
 		// Use saved position if available
 		if (positions && positions.has(table.name)) {
 			const pos = positions.get(table.name)!;
@@ -233,7 +241,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 			// Default grid layout - calculate based on actual table heights
 			const row = Math.floor(index / tablesPerRow);
 			const col = index % tablesPerRow;
-			
+
 			// Calculate cumulative height for this row
 			let rowY = 50;
 			for (let r = 0; r < row; r++) {
@@ -247,18 +255,18 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				}
 				rowY += maxHeightInRow + tableSpacing;
 			}
-			
+
 			x = Math.round((col * (tableWidth + tableSpacing) + 50) / gridSize) * gridSize;
 			y = Math.round(rowY / gridSize) * gridSize;
 		}
-		
+
 		const tableHeight = headerHeight + (table.fields.length * fieldHeight);
 		tablePositions.push({ table, x, y, height: tableHeight });
 	});
 
 	// Infinite canvas with viewBox
 	let svg = `<svg width="100%" height="100%" viewBox="0 0 2000 2000" xmlns="http://www.w3.org/2000/svg" id="diagram-svg" style="background: transparent;">`;
-	
+
 	// Define markers for cardinality indicators
 	svg += `<defs>`;
 	svg += `<symbol id="icon-glasses" viewBox="0 0 24 24" fill="none">`;
@@ -305,7 +313,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		});
 		svg += '</g>';
 	}
-	
+
 	svg += '<g id="relationships">';
 
 	// Draw relationships first (so they appear behind tables)
@@ -313,15 +321,15 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		if (ref.endpoints.length >= 2) {
 			const fromEndpoint = ref.endpoints[0];
 			const toEndpoint = ref.endpoints[1];
-			
+
 			const fromPos = tablePositions.find(p => p.table.name === fromEndpoint.tableName);
 			const toPos = tablePositions.find(p => p.table.name === toEndpoint.tableName);
-			
+
 			if (fromPos && toPos) {
 				// Find the specific field indices for connection points
 				let fromFieldIndex = 0;
 				let toFieldIndex = 0;
-				
+
 				if (fromEndpoint.fieldNames && fromEndpoint.fieldNames.length > 0) {
 					const fieldName = fromEndpoint.fieldNames[0];
 					fromFieldIndex = fromPos.table.fields.findIndex(f => f.name === fieldName);
@@ -329,7 +337,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 						fromFieldIndex = 0;
 					}
 				}
-				
+
 				if (toEndpoint.fieldNames && toEndpoint.fieldNames.length > 0) {
 					const fieldName = toEndpoint.fieldNames[0];
 					toFieldIndex = toPos.table.fields.findIndex(f => f.name === fieldName);
@@ -337,22 +345,22 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 						toFieldIndex = 0;
 					}
 				}
-				
+
 				// Calculate Y position based on field index
 				const fromFieldY = fromPos.y + headerHeight + (fromFieldIndex * fieldHeight) + (fieldHeight / 2);
 				const toFieldY = toPos.y + headerHeight + (toFieldIndex * fieldHeight) + (fieldHeight / 2);
-				
+
 				// Connection stub length - distance from table edge before first turn
 				const stubLength = 40;
-				
+
 				// Use intelligent side selection
 				const sides = calculateBestConnectionSides(
 					fromPos.x, fromFieldY, tableWidth,
 					toPos.x, toFieldY, tableWidth
 				);
-				
+
 				let fromX: number, toX: number, fromStubX: number, toStubX: number;
-				
+
 				// Set connection points based on calculated best sides
 				if (sides.fromSide === 'right') {
 					fromX = fromPos.x + tableWidth;
@@ -361,7 +369,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					fromX = fromPos.x;
 					fromStubX = fromX - stubLength;
 				}
-				
+
 				if (sides.toSide === 'right') {
 					toX = toPos.x + tableWidth;
 					toStubX = toX + stubLength;
@@ -369,18 +377,18 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					toX = toPos.x;
 					toStubX = toX - stubLength;
 				}
-				
+
 				const fromY = fromFieldY;
 				const toY = toFieldY;
-				
+
 				// Determine relationship cardinality
 				const fromRelation = fromEndpoint.relation || '*';
 				const toRelation = toEndpoint.relation || '1';
-				
+
 				// Determine which markers to use
 				let markerStart = '';
 				let markerEnd = '';
-				
+
 				// From side marker (start of line)
 				if (fromRelation === '*' || fromRelation === 'n') {
 					markerStart = 'url(#many-marker)';
@@ -389,7 +397,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				} else if (fromRelation === '0..1' || fromRelation === '?') {
 					markerStart = 'url(#zero-one-marker)';
 				}
-				
+
 				// To side marker (end of line)
 				if (toRelation === '*' || toRelation === 'n') {
 					markerEnd = 'url(#many-marker)';
@@ -398,11 +406,11 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				} else if (toRelation === '0..1' || toRelation === '?') {
 					markerEnd = 'url(#zero-one-marker)';
 				}
-				
+
 				// Calculate table heights
 				const fromTableHeight = headerHeight + (fromPos.table.fields.length * fieldHeight);
 				const toTableHeight = headerHeight + (toPos.table.fields.length * fieldHeight);
-				
+
 				// Calculate orthogonal path with stub points to prevent edge alignment
 				const pathData = calculateOrthogonalPath(
 					fromX, fromY, fromStubX, toX, toY, toStubX, gridSize, 15,
@@ -410,7 +418,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					toPos.x, toPos.y, toTableHeight,
 					tableWidth
 				);
-				
+
 				let tooltipText = '';
 				if (ref.name) {
 					tooltipText += `Name: ${escapeXml(ref.name)}\n`;
@@ -442,17 +450,17 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					marker-start="${markerStart}"
 					marker-end="${markerEnd}"
 				>`;
-				
+
 				if (tooltipText) {
 					svg += `<title>${tooltipText}</title>`;
 				}
-				
+
 				svg += `</path>`;
 				svg += `</g>`;
 			}
 		}
 	});
-	
+
 	svg += '</g>';
 
 	svg += '<g id="tables">';
@@ -483,7 +491,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 					});
 				}
 			});
-			
+
 			// Mark fields as FK if they're NOT a PK, or if both are PKs (many-to-many case)
 			allFields.forEach(fieldKey => {
 				// If this field is not a PK in its table, it's definitely a FK
@@ -504,74 +512,74 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 		const groupColorAttr = groupInfo?.color ? ` data-group-color="${escapeXml(groupInfo.color)}"` : '';
 		const groupNoteAttr = groupInfo?.note ? ` data-group-note="${escapeXml(groupInfo.note)}"` : '';
 		const clipSafeId = table.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-		
+
 		// Table container with data attributes for dragging
 		svg += `<g class="table draggable" data-table="${safeTableName}" data-x="${x}" data-y="${y}" data-height="${tableHeight}" data-width="${tableWidth}"${groupAttr}${groupColorAttr}${groupNoteAttr} transform="translate(${x}, ${y})" style="cursor: move;">`;
-		
+
 		// Clip path for rounded corners only on outer edges
 		svg += `<defs>`;
 		svg += `<clipPath id="clip-${clipSafeId}">`;
 		svg += `<rect width="${tableWidth}" height="${tableHeight}" rx="5" ry="5" />`;
 		svg += `</clipPath>`;
 		svg += `</defs>`;
-		
+
 		// Background group with clip path
 		svg += `<g clip-path="url(#clip-${clipSafeId})">`;
-		
+
 		// Header (no rounded corners)
 		svg += `<rect width="${tableWidth}" height="${headerHeight}" class="table-header" />`;
-		
+
 		// Body background (no rounded corners)
 		svg += `<rect y="${headerHeight}" width="${tableWidth}" height="${table.fields.length * fieldHeight}" class="table-body" />`;
-		
+
 		svg += `</g>`;
-		
+
 		// Outer border with rounded corners
 		svg += `<rect width="${tableWidth}" height="${tableHeight}" class="table-border" rx="5" ry="5" fill="none" />`;
-		
+
 		// Header text
 		const maxHeaderChars = 40;
-		const safeTableNameDisplay = safeTableName.length > maxHeaderChars 
-			? safeTableName.substring(0, maxHeaderChars - 1) + '…' 
+		const safeTableNameDisplay = safeTableName.length > maxHeaderChars
+			? safeTableName.substring(0, maxHeaderChars - 1) + '…'
 			: safeTableName;
 		svg += `<text x="${tableWidth / 2}" y="${headerHeight / 2 + 5}" class="table-name" text-anchor="middle" font-weight="bold" font-size="16">${safeTableNameDisplay}</text>`;
-		
+
 		// Fields
 		table.fields.forEach((field, index) => {
 			const fieldY = headerHeight + (index * fieldHeight);
-			
+
 			// Escape note for HTML attribute if present
 			const escapedNote = field.note ? field.note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;') : '';
 			const hasNoteClass = field.note ? ' has-note' : '';
 			const noteDataAttr = field.note ? ` data-note="${escapedNote}"` : '';
-			
+
 			// Field background (for hover effect)
 			svg += `<rect y="${fieldY}" width="${tableWidth}" height="${fieldHeight}" class="field-row${hasNoteClass}" fill="transparent"${noteDataAttr} />`;
-			
+
 			// Field name
 			const fieldLabelRaw = field.name;
 			const maxNameChars = 30;
-			const fieldLabelDisplay = fieldLabelRaw.length > maxNameChars 
-				? fieldLabelRaw.substring(0, maxNameChars - 1) + '…' 
+			const fieldLabelDisplay = fieldLabelRaw.length > maxNameChars
+				? fieldLabelRaw.substring(0, maxNameChars - 1) + '…'
 				: fieldLabelRaw;
 			const fieldLabel = escapeXml(fieldLabelDisplay);
 			let badges = '';
-			
+
 			if (field.unique) {
 				badges += ' UQ';
 			}
 			if (field.notNull) {
 				badges += ' NN';
 			}
-			
+
 			svg += `<text x="10" y="${fieldY + 20}" class="field-name" font-size="13">${fieldLabel}</text>`;
-			
+
 			// Icons after field name
 			const iconSize = 20;
 			const iconY = fieldY + (fieldHeight - iconSize) / 2;
 			// Fixed position for icons to normalize distance
 			let iconX = 200;
-			
+
 			// PK icon if this field is a primary key
 			if (field.pk) {
 				const pkIconSize = 16; // 20% smaller than standard icon size
@@ -581,7 +589,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				svg += `</svg>`;
 				iconX += pkIconSize + 2;
 			}
-			
+
 			// FK icon if this field is a foreign key
 			const fieldKey = `${table.name}.${field.name}`;
 			if (foreignKeys.has(fieldKey)) {
@@ -593,7 +601,7 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				svg += `</svg>`;
 				iconX += fkIconSize + 2;
 			}
-			
+
 			// Note icon if this field has a note
 			if (field.note) {
 				const noteIconSize = 16; // 20% smaller than standard icon size
@@ -605,16 +613,16 @@ export function generateSvgFromSchema(schema: ParsedSchema, positions?: Map<stri
 				svg += `<path fill="currentColor" style="color: var(--vscode-descriptionForeground, #999);" fill-rule="evenodd" clip-rule="evenodd" d="M6 1C4.34315 1 3 2.34315 3 4V20C3 21.6569 4.34315 23 6 23H18C19.6569 23 21 21.6569 21 20V8.82843C21 8.03278 20.6839 7.26972 20.1213 6.70711L15.2929 1.87868C14.7303 1.31607 13.9672 1 13.1716 1H6ZM5 4C5 3.44772 5.44772 3 6 3H12V8C12 9.10457 12.8954 10 14 10H19V20C19 20.5523 18.5523 21 18 21H6C5.44772 21 5 20.5523 5 20V4ZM18.5858 8L14 3.41421V8H18.5858Z"/>`;
 				svg += `</svg>`;
 			}
-			
+
 			// Field type
 			svg += `<text x="${tableWidth - 10}" y="${fieldY + 20}" class="field-type" text-anchor="end" font-size="12" opacity="0.7">${field.type}${badges}</text>`;
-			
+
 			// Divider line
 			if (index < table.fields.length - 1) {
 				svg += `<line x1="0" y1="${fieldY + fieldHeight}" x2="${tableWidth}" y2="${fieldY + fieldHeight}" class="field-divider" />`;
 			}
 		});
-		
+
 		svg += '</g>';
 	});
 

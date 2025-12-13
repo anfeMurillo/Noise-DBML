@@ -78,13 +78,13 @@ Generate comprehensive Markdown documentation automatically:
 ### 🗄️ SQL Generation
 Convert DBML to production-ready SQL scripts for any database:
 
-- **Multi-Database Support**: PostgreSQL, MySQL, SQLite, SQL Server
+- **Multi-Database Support**: PostgreSQL, MySQL, SQLite
 - **Smart Type Mapping**: Automatic data type conversion for each dialect
 - **Complete DDL**: CREATE TABLE, PRIMARY KEY, FOREIGN KEY constraints
 - **Referential Integrity**: ON DELETE and ON UPDATE actions
 - **Auto-Increment**: Proper SERIAL, IDENTITY, or AUTO_INCREMENT syntax
 - **Comments**: Table and column descriptions (where supported)
-- **Schema Support**: Multi-schema support (PostgreSQL, SQL Server)
+- **Schema Support**: Multi-schema support (PostgreSQL)
 - **Drop Statements**: Optional DROP TABLE statements for development
 
 ### 🔍 Anti-Pattern Detection
@@ -112,7 +112,7 @@ Import existing database schemas into DBML format:
 - **PostgreSQL**: Full support with schema detection and SSL handling
 - **MySQL**: Complete table and relationship import
 - **SQLite**: Local database file support and SQLite Cloud
-- **SQL Server**: Enterprise database support
+
 - **Connection Testing**: Built-in connection validation
 - **Schema Discovery**: Automatic detection of available schemas
 - **Constraint Import**: Primary keys, foreign keys, indexes, and defaults
@@ -182,7 +182,7 @@ Import existing database schemas into DBML format with full support for multiple
 - **PostgreSQL** - Full support with schema detection, SSL handling, and cloud databases
 - **MySQL** - Complete table and relationship import with constraint detection
 - **SQLite** - Local database files and SQLite Cloud support
-- **SQL Server** - Enterprise database support with schema separation
+
 
 #### PostgreSQL Connection Examples
 
@@ -224,18 +224,6 @@ mysql://username:password@host:3306/database_name?ssl=true
   sqlitecloud://username:password@host:8860/database
   https://your-project.sqlite.cloud/database
   ```
-
-#### SQL Server Connection Examples
-
-**Standard SQL Server:**
-```
-sqlserver://username:password@host:1433/database_name
-```
-
-**Azure SQL Database:**
-```
-sqlserver://username:password@server.database.windows.net:1433/database_name?encrypt=true
-```
 
 #### Connection Troubleshooting
 
@@ -322,7 +310,6 @@ node test-reverse-sqlite.js /path/to/database.db
    - **PostgreSQL** - Modern features, JSONB, UUID support
    - **MySQL** - MariaDB compatible, AUTO_INCREMENT
    - **SQLite** - Embedded database, simplified types
-   - **SQL Server** - Enterprise features, IDENTITY columns
 4. Select options:
    - Include DROP TABLE statements (for dev environments)
 5. Review and save the generated SQL
@@ -551,7 +538,6 @@ Available field attributes:
    - PostgreSQL
    - MySQL
    - SQLite
-   - SQL Server
 4. Choose whether to include DROP TABLE statements.
 5. The generated SQL will open in a new editor window.
 
@@ -575,7 +561,7 @@ The SQL generator supports:
 - Always **test generated SQL** in a development environment first
 - Review **foreign key actions** (CASCADE, RESTRICT) carefully
 - Check **data type mappings** for your specific database version
-- Consider **schema names** for better organization (PostgreSQL, SQL Server)
+- Consider **schema names** for better organization (PostgreSQL)
 
 ### DBML Best Practices
 - Use **consistent naming conventions** (snake_case or camelCase)

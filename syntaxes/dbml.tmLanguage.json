@@ -1,10 +1,15 @@
 {
   "scopeName": "source.dbml",
   "name": "DBML",
-  "fileTypes": ["dbml"],
+  "fileTypes": [
+    "dbml"
+  ],
   "patterns": [
     {
       "include": "#comments"
+    },
+    {
+      "include": "#indexDeclaration"
     },
     {
       "include": "#refStatements"
@@ -14,6 +19,9 @@
     },
     {
       "include": "#fieldDefinitions"
+    },
+    {
+      "include": "#attributes"
     },
     {
       "include": "#strings"
@@ -108,6 +116,31 @@
         }
       ]
     },
+    "indexDeclaration": {
+      "patterns": [
+        {
+          "name": "meta.index.declaration.dbml",
+          "match": "^\\s*(Index)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(on)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)",
+          "captures": {
+            "1": {
+              "name": "storage.type.dbml"
+            },
+            "2": {
+              "name": "entity.name.function.dbml"
+            },
+            "3": {
+              "name": "keyword.other.dbml"
+            },
+            "4": {
+              "name": "entity.name.type.dbml"
+            },
+            "5": {
+              "name": "variable.parameter.dbml"
+            }
+          }
+        }
+      ]
+    },
     "refStatements": {
       "patterns": [
         {
@@ -165,7 +198,6 @@
         }
       ]
     },
-
     "attributes": {
       "patterns": [
         {

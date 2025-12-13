@@ -35,7 +35,7 @@ async function main() {
 		sourcesContent: false,
 		platform: 'node',
 		outfile: 'dist/extension.js',
-		external: ['vscode', 'pg', 'mysql2', 'sqlite3', 'mssql'],
+		external: ['vscode', 'pg', 'mysql2', 'sqlite3', 'mssql', '@dbml/core'],
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */

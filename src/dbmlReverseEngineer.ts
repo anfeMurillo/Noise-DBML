@@ -1,11 +1,11 @@
 import { Client as PgClient } from 'pg';
 import mysql from 'mysql2/promise';
 import sqlite3 from 'sqlite3';
-import { ConnectionPool as MsSqlPool } from 'mssql';
+
 // @ts-ignore
 const { Database } = require('@sqlitecloud/drivers');
 
-export type SupportedDb = 'postgres' | 'mysql' | 'sqlite' | 'sqlserver';
+export type SupportedDb = 'postgres' | 'mysql' | 'sqlite';
 
 export interface ReverseEngineerOptions {
   type: SupportedDb;
@@ -20,8 +20,7 @@ export async function reverseEngineerToDbml(options: ReverseEngineerOptions): Pr
       return await reverseMysql(options.connectionString);
     case 'sqlite':
       return await reverseSqlite(options.connectionString);
-    case 'sqlserver':
-      return await reverseSqlServer(options.connectionString);
+
     default:
       throw new Error('Unsupported database type');
   }
@@ -99,32 +98,7 @@ function mapSqliteType(sqliteType: string): string {
   return typeMap[sqliteType.toLowerCase()] || sqliteType;
 }
 
-function mapSqlServerType(sqlType: string): string {
-  const typeMap: { [key: string]: string } = {
-    'int': 'int',
-    'bigint': 'bigint',
-    'smallint': 'smallint',
-    'tinyint': 'tinyint',
-    'float': 'float',
-    'real': 'real',
-    'decimal': 'decimal',
-    'numeric': 'numeric',
-    'varchar': 'varchar',
-    'nvarchar': 'nvarchar',
-    'char': 'char',
-    'nchar': 'nchar',
-    'text': 'text',
-    'ntext': 'ntext',
-    'bit': 'bit',
-    'date': 'date',
-    'datetime': 'datetime',
-    'datetime2': 'datetime2',
-    'smalldatetime': 'smalldatetime',
-    'time': 'time',
-    'datetimeoffset': 'datetimeoffset'
-  };
-  return typeMap[sqlType.toLowerCase()] || sqlType;
-}
+
 
 // --- PostgreSQL ---
 function sanitizeDefaultValue(defaultValue: string): string | null {
@@ -515,100 +489,4 @@ async function reverseSqlite(connectionString: string): Promise<string> {
   }
 }
 
-// --- SQL Server ---
-async function reverseSqlServer(connStr: string): Promise<string> {
-  const pool = new MsSqlPool(connStr);
-  try {
-    await pool.connect();
 
-    // Get all user tables
-    const tablesResult = await pool.request().query(`
-      SELECT TABLE_NAME
-      FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = 'dbo'
-      ORDER BY TABLE_NAME
-    `);
-
-    let dbml = '';
-
-    for (const tableRow of tablesResult.recordset) {
-      const tableName = tableRow.TABLE_NAME;
-
-      dbml += `Table ${tableName} {\n`;
-
-      // Get columns with constraints
-      const columnsResult = await pool.request().query(`
-        SELECT
-          c.COLUMN_NAME,
-          c.DATA_TYPE,
-          c.IS_NULLABLE,
-          c.COLUMN_DEFAULT,
-          CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as IS_PRIMARY_KEY,
-          CASE WHEN id.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as IS_IDENTITY
-        FROM INFORMATION_SCHEMA.COLUMNS c
-        LEFT JOIN (
-          SELECT ku.COLUMN_NAME
-          FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-          JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
-          WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY' AND tc.TABLE_NAME = '${tableName}' AND tc.TABLE_SCHEMA = 'dbo'
-        ) pk ON c.COLUMN_NAME = pk.COLUMN_NAME
-        LEFT JOIN (
-          SELECT COLUMN_NAME
-          FROM sys.columns sc
-          JOIN sys.tables st ON sc.object_id = st.object_id
-          WHERE st.name = '${tableName}' AND sc.is_identity = 1
-        ) id ON c.COLUMN_NAME = id.COLUMN_NAME
-        WHERE c.TABLE_NAME = '${tableName}' AND c.TABLE_SCHEMA = 'dbo'
-        ORDER BY c.ORDINAL_POSITION
-      `);
-
-      for (const col of columnsResult.recordset) {
-        let columnDef = `  ${col.COLUMN_NAME} ${mapSqlServerType(col.DATA_TYPE)}`;
-        const attributes: string[] = [];
-
-        if (col.IS_PRIMARY_KEY) { attributes.push('pk'); }
-        if (col.IS_IDENTITY) { attributes.push('increment'); }
-        if (col.IS_NULLABLE === 'NO') { attributes.push('not null'); }
-        if (col.COLUMN_DEFAULT && !col.IS_IDENTITY) {
-          const sanitized = sanitizeDefaultValue(col.COLUMN_DEFAULT);
-          if (sanitized) {
-            attributes.push(`default: ${sanitized}`);
-          }
-        }
-
-        if (attributes.length > 0) {
-          columnDef += ` [${attributes.join(', ')}]`;
-        }
-
-        dbml += columnDef + '\n';
-      }
-
-      dbml += `}\n\n`;
-    }
-
-    // Get foreign key relationships
-    const fkResult = await pool.request().query(`
-      SELECT
-        fk.name as FK_NAME,
-        tp.name as parent_table,
-        tr.name as referenced_table,
-        cp.name as parent_column,
-        cr.name as referenced_column
-      FROM sys.foreign_keys fk
-      INNER JOIN sys.tables tp ON fk.parent_object_id = tp.object_id
-      INNER JOIN sys.tables tr ON fk.referenced_object_id = tr.object_id
-      INNER JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
-      INNER JOIN sys.columns cp ON fkc.parent_column_id = cp.column_id AND fkc.parent_object_id = cp.object_id
-      INNER JOIN sys.columns cr ON fkc.referenced_column_id = cr.column_id AND fkc.referenced_object_id = cr.object_id
-      ORDER BY tp.name, cp.name
-    `);
-
-    for (const fk of fkResult.recordset) {
-      dbml += `Ref: ${fk.parent_table}.${fk.parent_column} > ${fk.referenced_table}.${fk.referenced_column}\n`;
-    }
-
-    return dbml.trim();
-  } finally {
-    await pool.close();
-  }
-}
