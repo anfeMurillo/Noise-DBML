@@ -89,9 +89,18 @@ export class DbmlDocumentFormatter implements vscode.DocumentFormattingEditProvi
         edits: vscode.TextEdit[],
         options: vscode.FormattingOptions
     ) {
-        // Calculate max width for each column
+        // Calculate max width for name column across all lines
         const maxNameLength = Math.max(...lines.map(l => l.parts[0].length));
-        const maxTypeLength = Math.max(...lines.map(l => l.parts[1].length));
+        
+        // Only calculate max type length for lines that have settings (brackets)
+        // This prevents unnecessary spacing on lines without brackets
+        const linesWithSettings = lines.filter(l => l.parts.length > 2);
+        const maxTypeLength = linesWithSettings.length > 0 
+            ? Math.max(...linesWithSettings.map(l => l.parts[1].length))
+            : 0;
+
+        // Get indentation based on editor options
+        const indentation = options.insertSpaces ? ' '.repeat(options.tabSize) : '\t';
 
         for (const line of lines) {
             const parts = line.parts;
@@ -99,27 +108,10 @@ export class DbmlDocumentFormatter implements vscode.DocumentFormattingEditProvi
             const type = parts[1];
             const settings = parts[2] || '';
 
-            // Construct formatted line
-            // We use tabs or spaces based on options? 
-            // The user asked for "tabulacion para alinear", which implies alignment.
-            // We will align using spaces to ensure visual alignment regardless of tab size, 
-            // or use tabs if insertSpaces is false?
-            // Usually alignment is done with spaces to be consistent.
-            // But if the user specifically asked for "tabulacion", maybe they want tabs?
-            // "Tabulacion" in Spanish can mean "Tabulation" (using tabs) or just "Alignment".
-            // Given "alinear el texto", I will assume visual alignment.
-            // Using spaces is safer for alignment.
-            
-            // However, indentation should follow options.
-            const indentation = options.insertSpaces ? ' '.repeat(options.tabSize) : '\t';
-            
-            let formattedLine = `${indentation}${name.padEnd(maxNameLength)} ${type}`;
-            
-            if (settings) {
-                formattedLine = `${indentation}${name.padEnd(maxNameLength)} ${type.padEnd(maxTypeLength)} ${settings}`;
-            } else {
-                 formattedLine = `${indentation}${name.padEnd(maxNameLength)} ${type}`;
-            }
+            // Construct formatted line with aligned brackets
+            const formattedLine = settings
+                ? `${indentation}${name.padEnd(maxNameLength)} ${type.padEnd(maxTypeLength)} ${settings}`
+                : `${indentation}${name.padEnd(maxNameLength)} ${type}`;
 
             const originalLine = document.lineAt(line.index);
             edits.push(vscode.TextEdit.replace(originalLine.range, formattedLine));
