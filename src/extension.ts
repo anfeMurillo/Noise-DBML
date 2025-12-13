@@ -1,11 +1,21 @@
 import * as vscode from 'vscode';
 import { DbmlPreviewProvider } from './dbmlPreviewProvider';
+import { DbmlCompletionItemProvider } from './dbmlCompletion';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('DBML Diagram Viewer extension is now active!');
 
 	// Register the DBML preview provider
 	const provider = new DbmlPreviewProvider(context.extensionUri);
+
+	// Register completion item provider
+	context.subscriptions.push(
+		vscode.languages.registerCompletionItemProvider(
+			{ language: 'dbml', scheme: 'file' },
+			new DbmlCompletionItemProvider(),
+			'[' // Trigger completion when '[' is typed, though usually snippets trigger on typing prefix
+		)
+	);
 
 	// Register the command to open preview
 	const disposable = vscode.commands.registerCommand('noise-dbml.openPreview', () => {

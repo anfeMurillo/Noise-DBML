@@ -2,9 +2,6 @@
 
 Visual Studio Code extension for previewing DBML (Database Markup Language) relational diagrams.
 
-![Example 1](https://raw.githubusercontent.com/anfeh/dbml-diagram-viewer/main/media/example_1.png)
-![Example 2](https://raw.githubusercontent.com/anfeh/dbml-diagram-viewer/main/media/example_2.png)
-
 ## Features
 
 ### 📊 Interactive Preview
@@ -66,6 +63,26 @@ Enum job_status {
   failure
 }
 ```
+
+### Relationships
+Relationships can be defined in two ways:
+
+**1. Explicit Ref block:**
+```dbml
+Ref: users.id < posts.user_id
+```
+
+**2. Inline column definition:**
+```dbml
+Table posts {
+  user_id integer [ref: > users.id]
+}
+```
+
+Supported relationship types:
+- `One-to-One`: `-`
+- `One-to-Many`: `<`
+- `Many-to-One`: `>`
 
 ## Usage
 
