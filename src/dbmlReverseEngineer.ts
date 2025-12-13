@@ -2,6 +2,8 @@ import { Client as PgClient } from 'pg';
 import mysql from 'mysql2/promise';
 import sqlite3 from 'sqlite3';
 import { ConnectionPool as MsSqlPool } from 'mssql';
+// @ts-ignore
+const { Database } = require('@sqlitecloud/drivers');
 
 export type SupportedDb = 'postgres' | 'mysql' | 'sqlite' | 'sqlserver';
 
@@ -139,8 +141,14 @@ function sanitizeDefaultValue(defaultValue: string): string | null {
   if (value.includes('(') || value.includes(')') || value.toLowerCase().includes('now') || value.toLowerCase().includes('current')) {
     return null; // Skip complex defaults
   }
-  // Escape single quotes for DBML
-  return `'${value.replace(/'/g, "\\'")}'`;
+  // For DBML, quote strings but not numbers or booleans
+  if (isNaN(Number(value)) && value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false') {
+    // It's a string, quote it
+    return `'${value.replace(/'/g, "\\'")}'`;
+  } else {
+    // Number or boolean, return as is
+    return value;
+  }
 }
 
 export async function reversePostgres(connStr: string): Promise<string> {
@@ -260,9 +268,15 @@ export async function reversePostgres(connStr: string): Promise<string> {
           }
           let columnDef = `  ${col.column_name} ${mappedType}`;
           const settings: string[] = [];
-          if (col.is_primary_key) settings.push('pk');
-          if (col.is_auto_increment) settings.push('increment');
-          if (col.is_nullable === 'NO') settings.push('not null');
+          if (col.is_primary_key) {
+            settings.push('pk');
+          }
+          if (col.is_auto_increment) {
+            settings.push('increment');
+          }
+          if (col.is_nullable === 'NO') {
+            settings.push('not null');
+          }
           if (col.column_default && !col.is_auto_increment) {
             const sanitizedDefault = sanitizeDefaultValue(col.column_default);
             if (sanitizedDefault) {
@@ -381,14 +395,20 @@ async function reverseMysql(connStr: string): Promise<string> {
 
       for (const col of columns as any[]) {
         let columnDef = `  ${col.COLUMN_NAME} ${mapMysqlType(col.COLUMN_TYPE)}`;
+        const attributes: string[] = [];
 
-        if (col.COLUMN_KEY === 'PRI') {columnDef += ' [pk';}
-        if (col.EXTRA.includes('auto_increment')) {columnDef += ', increment';}
-        if (col.COLUMN_KEY === 'PRI') {columnDef += ']';}
-
-        if (col.IS_NULLABLE === 'NO') {columnDef += ' [not null]';}
+        if (col.COLUMN_KEY === 'PRI') { attributes.push('pk'); }
+        if (col.EXTRA.includes('auto_increment')) { attributes.push('increment'); }
+        if (col.IS_NULLABLE === 'NO') { attributes.push('not null'); }
         if (col.COLUMN_DEFAULT && !col.EXTRA.includes('auto_increment')) {
-          columnDef += ` [default: ${col.COLUMN_DEFAULT}]`;
+          const sanitized = sanitizeDefaultValue(col.COLUMN_DEFAULT);
+          if (sanitized) {
+            attributes.push(`default: ${sanitized}`);
+          }
+        }
+
+        if (attributes.length > 0) {
+          columnDef += ` [${attributes.join(', ')}]`;
         }
 
         dbml += columnDef + '\n';
@@ -420,28 +440,55 @@ async function reverseMysql(connStr: string): Promise<string> {
 }
 
 // --- SQLite ---
-async function reverseSqlite(filePath: string): Promise<string> {
-  const db = new sqlite3.Database(filePath);
+async function reverseSqlite(connectionString: string): Promise<string> {
+  let db: any;
+  let isCloud = false;
+
+  if (connectionString.startsWith('sqlitecloud://') || connectionString.startsWith('https://')) {
+    isCloud = true;
+    db = new Database(connectionString);
+  } else {
+    db = new sqlite3.Database(connectionString);
+  }
+
   try {
-    const all = (sql: string, params: any[] = []) => new Promise<any[]>((resolve, reject) => {
-      db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)));
-    });
+    const all = async (sql: string, params: any[] = []) => {
+      if (isCloud) {
+        const result = await db.sql(sql);
+        return result;
+      } else {
+        return new Promise<any[]>((resolve, reject) => {
+          db.all(sql, params, (err: any, rows: any[]) => (err ? reject(err) : resolve(rows)));
+        });
+      }
+    };
 
     const tables = await all(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`);
     let dbml = '';
 
     for (const row of tables) {
-      const tableName = row.name;
+      const tableName = row.name || row.NAME;
 
       dbml += `Table ${tableName} {\n`;
 
       const columns = await all(`PRAGMA table_info("${tableName}")`);
       for (const col of columns) {
-        let columnDef = `  ${col.name} ${mapSqliteType(col.type)}`;
+        let columnDef = `  ${col.name || col.NAME} ${mapSqliteType(col.type || col.TYPE)}`;
+        const attributes: string[] = [];
 
-        if (col.pk) {columnDef += ' [pk]';}
-        if (!col.notnull) {columnDef += ' [not null]';}
-        if (col.dflt_value) {columnDef += ` [default: ${col.dflt_value}]`;}
+        if (col.pk || col.PK) { attributes.push('pk'); }
+        if (col.notnull || col.NOTNULL) { attributes.push('not null'); }
+        if ((col.dflt_value !== null && col.dflt_value !== undefined) || (col.DFLT_VALUE !== null && col.DFLT_VALUE !== undefined)) {
+          const dflt = col.dflt_value || col.DFLT_VALUE;
+          const sanitized = sanitizeDefaultValue(dflt);
+          if (sanitized) {
+            attributes.push(`default: ${sanitized}`);
+          }
+        }
+
+        if (attributes.length > 0) {
+          columnDef += ` [${attributes.join(', ')}]`;
+        }
 
         dbml += columnDef + '\n';
       }
@@ -451,16 +498,20 @@ async function reverseSqlite(filePath: string): Promise<string> {
 
     // Get foreign key relationships
     for (const tableRow of tables) {
-      const tableName = tableRow.name;
+      const tableName = tableRow.name || tableRow.NAME;
       const fks = await all(`PRAGMA foreign_key_list("${tableName}")`);
       for (const fk of fks) {
-        dbml += `Ref: ${tableName}.${fk.from} > ${fk.table}.${fk.to}\n`;
+        dbml += `Ref: ${tableName}.${fk.from || fk.FROM} > ${fk.table || fk.TABLE}.${fk.to || fk.TO}\n`;
       }
     }
 
     return dbml.trim();
   } finally {
-    db.close();
+    if (isCloud) {
+      await db.close();
+    } else {
+      db.close();
+    }
   }
 }
 
@@ -513,13 +564,21 @@ async function reverseSqlServer(connStr: string): Promise<string> {
 
       for (const col of columnsResult.recordset) {
         let columnDef = `  ${col.COLUMN_NAME} ${mapSqlServerType(col.DATA_TYPE)}`;
+        const attributes: string[] = [];
 
-        if (col.IS_PRIMARY_KEY) {columnDef += ' [pk';}
-        if (col.IS_IDENTITY) {columnDef += ', increment';}
-        if (col.IS_PRIMARY_KEY) {columnDef += ']';}
+        if (col.IS_PRIMARY_KEY) { attributes.push('pk'); }
+        if (col.IS_IDENTITY) { attributes.push('increment'); }
+        if (col.IS_NULLABLE === 'NO') { attributes.push('not null'); }
+        if (col.COLUMN_DEFAULT && !col.IS_IDENTITY) {
+          const sanitized = sanitizeDefaultValue(col.COLUMN_DEFAULT);
+          if (sanitized) {
+            attributes.push(`default: ${sanitized}`);
+          }
+        }
 
-        if (col.IS_NULLABLE === 'NO') {columnDef += ' [not null]';}
-        if (col.COLUMN_DEFAULT && !col.IS_IDENTITY) {columnDef += ` [default: ${col.COLUMN_DEFAULT}]`;}
+        if (attributes.length > 0) {
+          columnDef += ` [${attributes.join(', ')}]`;
+        }
 
         dbml += columnDef + '\n';
       }

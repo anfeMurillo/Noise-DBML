@@ -142,7 +142,48 @@ function generateColumnDefinition(field: ParsedField, opts: Required<SqlGenerati
         parts.push('UNIQUE');
     }
 
+    // DEFAULT
+    if (field.default) {
+        const defaultValue = formatDefaultValue(field.default, opts.dialect);
+        if (defaultValue) {
+            parts.push(`DEFAULT ${defaultValue}`);
+        }
+    }
+
     return parts.join(' ');
+}
+
+function formatDefaultValue(defaultInfo: { type: string; value: string }, dialect: string): string | null {
+    const { type, value } = defaultInfo;
+    
+    switch (type.toLowerCase()) {
+        case 'string':
+        case 'varchar':
+        case 'char':
+            return `'${value.replace(/'/g, "''")}'`;
+        case 'boolean':
+            if (dialect === 'postgresql') {
+                return value.toLowerCase() === 'true' ? 'TRUE' : 'FALSE';
+            } else if (dialect === 'mysql') {
+                return value.toLowerCase() === 'true' ? '1' : '0';
+            } else if (dialect === 'sqlserver') {
+                return value.toLowerCase() === 'true' ? '1' : '0';
+            } else {
+                return value.toUpperCase();
+            }
+        case 'number':
+        case 'int':
+        case 'integer':
+        case 'float':
+        case 'decimal':
+        case 'double':
+            return value;
+        case 'null':
+            return 'NULL';
+        default:
+            // For complex defaults or unknown types, try to use the value as-is
+            return value;
+    }
 }
 
 function generateForeignKeyStatements(ref: ParsedRef, opts: Required<SqlGenerationOptions>): string | null {

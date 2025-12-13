@@ -13,6 +13,10 @@ export interface ParsedField {
 	notNull?: boolean;
 	increment?: boolean;
 	note?: string;
+	default?: {
+		type: string;
+		value: string;
+	};
 }
 
 export interface ParsedRef {

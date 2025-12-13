@@ -3,19 +3,37 @@
 const { Parser } = require('@dbml/core');
 const fs = require('fs');
 
-const dbmlContent = fs.readFileSync('test-user-dbml.dbml', 'utf8');
+const dbmlContent = fs.readFileSync('test-user-syntax.dbml', 'utf8');
+
+// Preprocess to support multiple brackets
+const processedContent = dbmlContent.replace(/\]\s*\[/g, ', ');
+console.log('Original DBML:');
+console.log(dbmlContent);
+console.log('\nProcessed DBML:');
+console.log(processedContent);
 
 try {
-  const parsed = Parser.parse(dbmlContent, 'dbml');
+  const parsed = Parser.parse(processedContent, 'dbml');
   console.log('✅ DBML parsed successfully');
-  console.log('Parsed:', typeof parsed, parsed);
   if (parsed && typeof parsed === 'object') {
-    console.log('Keys:', Object.keys(parsed));
     if (parsed.schemas) {
-      console.log('Schemas:', parsed.schemas.length);
-    }
-    if (parsed.tables) {
-      console.log('Tables:', parsed.tables.length);
+      const schema = parsed.schemas[0];
+      for (const table of schema.tables) {
+        if (table.name === 'needed_ingredients') {
+          console.log('Table:', table.name);
+          console.log('Fields:');
+          for (const field of table.fields) {
+            console.log('  ', field.name, field.type.type_name, {
+              pk: field.pk,
+              not_null: field.not_null,
+              dbdefault: field.dbdefault,
+              increment: field.increment,
+              unique: field.unique
+            });
+          }
+          break;
+        }
+      }
     }
   }
 } catch (error) {

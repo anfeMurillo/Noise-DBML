@@ -39,18 +39,47 @@ export function activate(context: vscode.ExtensionContext) {
 			// Ask user for connection string or file path
 			let connString = '';
 			if (dbTypePick.value === 'sqlite') {
-				console.log('Showing file picker for SQLite');
-				const fileUri = await vscode.window.showOpenDialog({
-					canSelectMany: false,
-					openLabel: 'Select SQLite Database File',
-					filters: { 'SQLite DB': ['db', 'sqlite', 'sqlite3'] }
+				console.log('Showing SQLite type selection');
+				const sqliteTypePick = await vscode.window.showQuickPick([
+					{ label: 'Local File', value: 'local' },
+					{ label: 'Online (SQLite Cloud)', value: 'online' }
+				], {
+					placeHolder: 'Select SQLite database location',
+					title: 'SQLite Type'
 				});
-				if (!fileUri || fileUri.length === 0) {
-					console.log('User cancelled file selection');
+
+				if (!sqliteTypePick) {
+					console.log('User cancelled SQLite type selection');
 					return;
 				}
-				connString = fileUri[0].fsPath;
-				console.log('SQLite file selected:', connString);
+
+				if (sqliteTypePick.value === 'local') {
+					console.log('Showing file picker for SQLite');
+					const fileUri = await vscode.window.showOpenDialog({
+						canSelectMany: false,
+						openLabel: 'Select SQLite Database File',
+						filters: { 'SQLite DB': ['db', 'sqlite', 'sqlite3'] }
+					});
+					if (!fileUri || fileUri.length === 0) {
+						console.log('User cancelled file selection');
+						return;
+					}
+					connString = fileUri[0].fsPath;
+					console.log('SQLite file selected:', connString);
+				} else {
+					console.log('Showing connection string input for SQLite Cloud');
+					const input = await vscode.window.showInputBox({
+						prompt: 'Enter the SQLite Cloud connection string',
+						ignoreFocusOut: true,
+						placeHolder: 'sqlitecloud://... or https://...'
+					});
+					if (!input) {
+						console.log('User cancelled connection string input');
+						return;
+					}
+					connString = input;
+					console.log('SQLite Cloud connection string entered (length):', connString.length);
+				}
 			} else {
 				console.log('Showing connection string input');
 				const input = await vscode.window.showInputBox({

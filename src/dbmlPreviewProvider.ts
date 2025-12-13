@@ -421,7 +421,7 @@ export class DbmlPreviewProvider {
         return { sanitizedBody, tableNames, note: noteValue };
     }
 
-    private convertToSchema(database: any, metadataGroups: TableGroupMetadata[]): ParsedSchema {
+    private convertToSchema(database: any, metadataGroups: TableGroupMetadata[], content: string): ParsedSchema {
 		const tables: ParsedTable[] = [];
 		const refs: ParsedRef[] = [];
         const groups: ParsedGroup[] = [];
@@ -440,14 +440,20 @@ export class DbmlPreviewProvider {
 					
 					if (table.fields) {
 						table.fields.forEach((field: any) => {
+							const fieldText = content.substring(field.token.start.offset, field.token.end.offset);
+							const hasPk = fieldText.includes('[pk]');
 							const parsedField: ParsedField = {
 								name: field.name || '',
 								type: field.type?.type_name || 'unknown',
-								pk: field.pk || false,
+								pk: hasPk || field.pk || false,
 								unique: field.unique || false,
 								notNull: field.not_null || false,
 								increment: field.increment || false,
-								note: field.note || undefined
+								note: field.note || undefined,
+								default: field.dbdefault ? {
+									type: field.dbdefault.type,
+									value: field.dbdefault.value
+								} : undefined
 							};
 							fields.push(parsedField);
 						});
@@ -533,8 +539,10 @@ export class DbmlPreviewProvider {
         const dbmlContent = this.currentDocument.getText();
         let database;
         try {
+             // Preprocess DBML to support multiple attribute brackets
+             const processedContent = dbmlContent.replace(/\]\s*\[/g, ', ');
              // @ts-ignore
-             database = Parser.parse(dbmlContent, 'dbml');
+             database = Parser.parse(processedContent, 'dbml');
         } catch (e) {
             vscode.window.showErrorMessage('Failed to parse DBML: ' + e);
             return;
@@ -549,7 +557,7 @@ export class DbmlPreviewProvider {
             return;
         }
 
-        const schema = this.convertToSchema(database, []);
+        const schema = this.convertToSchema(database, [], dbmlContent);
         const tablesBySchema = new Map<string, ParsedTable[]>();
         
         schema.tables.forEach(table => {
@@ -1242,12 +1250,15 @@ private getWebviewContent(sanitizedDbml: string, layoutData: LayoutData, documen
 	let errorMessage = '';
 
 	try {
+		// Preprocess DBML to support multiple attribute brackets
+		sanitizedDbml = sanitizedDbml.replace(/\]\s*\[/g, ', ');
+		
 		// Parse DBML
 		// @ts-ignore - @dbml/core types are incomplete
 		const database = Parser.parse(sanitizedDbml, 'dbml');
 		
 		// Convert parsed database to our schema format
-		const schema = this.convertToSchema(database, groupMetadata);
+		const schema = this.convertToSchema(database, groupMetadata, sanitizedDbml);
 		
 		// Generate SVG from schema
 		svgContent = generateSvgFromSchema(schema);
